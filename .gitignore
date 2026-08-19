@@ -1,0 +1,15 @@
+auth.json
+
+# private sessions
+sessions/
+
+# packaages
+npm/
+git/
+
+# caches
+models-store.json
+trust.json
+
+*.log
+.DS_Store
