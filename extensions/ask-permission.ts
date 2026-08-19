@@ -18,9 +18,9 @@
 import { resolve, relative, isAbsolute, sep, join } from "node:path";
 import { realpath } from "node:fs/promises";
 import { homedir } from "node:os";
-import { spawnSync } from "node:child_process";
 import { isToolCallEventType } from "@earendil-works/pi-coding-agent";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { formatBashCommand } from "../lib/bash-format.ts";
 
 /**
  * Directories whose files are auto-allowed for `read` (in addition to the
@@ -28,27 +28,6 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
  * e.g. "~/.config". Add more as you like: "/tmp", a dotfiles repo, ...
  */
 const ALLOWED_READ_DIRS = ["/nix", "~/.rustup", "~/.cargo"];
-
-/**
- * Format a bash command through shfmt for readability. Falls back to the
- * original command on any failure (shfmt missing, parse error, timeout).
- * shfmt is mostly behavior-preserving; see its docs for edge cases.
- */
-function formatBashCommand(command: string): string {
-  try {
-    const result = spawnSync("shfmt", ["-ln", "bash"], {
-      input: command,
-      encoding: "utf8",
-      timeout: 5000,
-    });
-    if (result.status === 0 && typeof result.stdout === "string" && result.stdout.length > 0) {
-      return result.stdout.replace(/\n$/, "");
-    }
-  } catch {
-    // shfmt missing or failed — keep the original
-  }
-  return command;
-}
 
 /** True when `child` is `parent` itself or a path inside it (lexical). */
 function isInside(parent: string, child: string): boolean {

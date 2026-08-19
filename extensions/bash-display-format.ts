@@ -17,11 +17,11 @@
  * - PI_* session env vars are not injected
  */
 
-import { spawnSync } from "node:child_process";
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { createLocalBashOperations } from "@earendil-works/pi-coding-agent";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { formatBashCommand } from "../lib/bash-format.ts";
 
 const MAX_BYTES = 50 * 1024;
 
@@ -32,22 +32,6 @@ const bashSchema = Type.Object({
   ),
 });
 
-/** Format a bash command through shfmt for display. Falls back to original. */
-function formatBashCommand(command: string): string {
-  try {
-    const result = spawnSync("shfmt", ["-ln", "bash"], {
-      input: command,
-      encoding: "utf8",
-      timeout: 5000,
-    });
-    if (result.status === 0 && typeof result.stdout === "string" && result.stdout.length > 0) {
-      return result.stdout.replace(/\n$/, "");
-    }
-  } catch {
-    // shfmt missing or failed — keep the original
-  }
-  return command;
-}
 
 function appendStatus(text: string, status: string): string {
   return `${text ? `${text}\n\n` : ""}${status}`;
