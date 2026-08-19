@@ -6,6 +6,7 @@ sessions/
 # packaages
 npm/
 git/
+node_modules/
 
 # caches
 models-store.json

@@ -14,32 +14,35 @@
  *   - escaping: a command already starting with `bwrap` is not re-wrapped
  */
 
+import { quote } from "shell-quote";
 import { isToolCallEventType } from "@earendil-works/pi-coding-agent";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 let sandboxEnabled = false;
 
-/** Wrap a bash command in a bwrap invocation (project dir writable). */
+/**
+ * Wrap a bash command in a bwrap invocation (project dir writable).
+ *
+ * The whole invocation is assembled as argv and quoted with shell-quote, so
+ * `cwd` (which may contain spaces) and the inner command (which may contain
+ * quotes, `$(...)`, backticks, etc.) are passed through verbatim to the inner
+ * `bash -c` without being interpreted by the outer shell.
+ */
 function wrapInBwrap(command: string, cwd: string): string {
-  const flags = [
-    "--ro-bind",
-    "/",
-    "/", // read-only root
-    "--bind",
-    cwd,
-    cwd, // project directory stays writable
-    "--dev",
-    "/dev",
-    "--proc",
-    "/proc",
-    "--tmpfs",
-    "/tmp",
+  const args = [
+    "bwrap",
+    "--ro-bind", "/", "/", // read-only root
+    "--bind", cwd, cwd, // project directory stays writable
+    "--dev", "/dev",
+    "--proc", "/proc",
+    "--tmpfs", "/tmp",
     "--unshare-net", // no network
     "--unshare-pid",
     "--unshare-ipc",
     "--die-with-parent",
-  ].join(" ");
-  return `bwrap ${flags} bash -c ${JSON.stringify(command)}`;
+    "bash", "-c", command,
+  ];
+  return quote(args);
 }
 
 export default function (pi: ExtensionAPI) {
