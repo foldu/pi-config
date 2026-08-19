@@ -22,11 +22,18 @@ let sandboxEnabled = false;
 /** Wrap a bash command in a bwrap invocation (project dir writable). */
 function wrapInBwrap(command: string, cwd: string): string {
   const flags = [
-    "--ro-bind", "/", "/", // read-only root
-    "--bind", cwd, cwd, // project directory stays writable
-    "--dev", "/dev",
-    "--proc", "/proc",
-    "--tmpfs", "/tmp",
+    "--ro-bind",
+    "/",
+    "/", // read-only root
+    "--bind",
+    cwd,
+    cwd, // project directory stays writable
+    "--dev",
+    "/dev",
+    "--proc",
+    "/proc",
+    "--tmpfs",
+    "/tmp",
     "--unshare-net", // no network
     "--unshare-pid",
     "--unshare-ipc",

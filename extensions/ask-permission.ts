@@ -53,9 +53,7 @@ function formatBashCommand(command: string): string {
 /** True when `child` is `parent` itself or a path inside it (lexical). */
 function isInside(parent: string, child: string): boolean {
   const rel = relative(parent, child);
-  return (
-    rel === "" || (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel))
-  );
+  return rel === "" || (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
 }
 
 /** Resolve a path to an absolute, symlink-canonicalized path. */
@@ -102,7 +100,6 @@ export default function (pi: ExtensionAPI) {
   pi.on("tool_call", async (event, ctx) => {
     if (alwaysAllow.has(event.toolName)) return undefined;
 
-
     // Auto-allow reads of files inside the project directory or allowed dirs.
     if (isToolCallEventType("read", event)) {
       const target = await canonical(ctx.cwd, event.input.path);
@@ -134,7 +131,7 @@ export default function (pi: ExtensionAPI) {
       if (preview.length > 500) preview = preview.slice(0, 500) + "…";
     }
 
-    const options =  ["Allow", "Disallow"];
+    const options = ["Allow", "Disallow"];
     const title = isBash
       ? `Allow bash?\n\n${preview}`
       : `Allow tool call?\n\nTool: ${event.toolName}\nInput: ${preview}`;

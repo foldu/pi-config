@@ -27,7 +27,9 @@ const MAX_BYTES = 50 * 1024;
 
 const bashSchema = Type.Object({
   command: Type.String({ description: "Bash command to execute" }),
-  timeout: Type.Optional(Type.Number({ description: "Timeout in seconds (optional, no default timeout)" })),
+  timeout: Type.Optional(
+    Type.Number({ description: "Timeout in seconds (optional, no default timeout)" }),
+  ),
 });
 
 /** Format a bash command through shfmt for display. Falls back to original. */
@@ -59,7 +61,9 @@ export default function (pi: ExtensionAPI) {
       "Execute a bash command in the current working directory. Returns stdout and stderr. Output is truncated to last 50KB. Optionally provide a timeout in seconds.",
     // promptSnippet/promptGuidelines are not inherited from the built-in tool
     promptSnippet: "Execute bash commands (ls, grep, find, etc.)",
-    promptGuidelines: ["You can inspect PI_* environment variables for current model and session details."],
+    promptGuidelines: [
+      "You can inspect PI_* environment variables for current model and session details.",
+    ],
     parameters: bashSchema,
 
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
