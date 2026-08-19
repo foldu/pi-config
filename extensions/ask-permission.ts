@@ -5,12 +5,10 @@
  * - `read` tool calls for files inside the project directory or inside any
  *   directory in `ALLOWED_READ_DIRS` below are auto-allowed (no prompt).
  *   Reads elsewhere go through the dialog.
- * - `write` calls offer: Allow | Edit | Disallow.
- *   "Edit" opens the proposed content directly in your real external editor
- *   (`externalEditor` setting, `$VISUAL`, `$EDITOR`, or nano) — no in-TUI
- *   dialog. The edited content is what gets written. In headless/RPC mode it
- *   falls back to the built-in editor dialog.
- * - All other tools offer: Allow | Disallow.
+ * - `bash` calls show the script directly in the dialog, shfmt-formatted for
+ *   readability (display only — the original command is what executes).
+ *   Shared formatter: ../lib/bash-format.ts
+ * - All tools offer Allow | Disallow; non-bash tools show a JSON input preview.
  *
  * Blocks the tool call if the user disallows, or if there is no UI to ask with.
  */
