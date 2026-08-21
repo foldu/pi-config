@@ -13,7 +13,8 @@
  * (or the configured `allowedReadDirs`) auto-allow, everything else prompts.
  */
 
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
+import { access as accessPath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { quote } from "shell-quote";
@@ -160,7 +161,7 @@ async function ensureNetBridge(): Promise<NetBridge | null> {
 }
 
 function stopNet(): void {
-  stopBridge(netBridge);
+  void stopBridge(netBridge);
   netBridge = null;
   netProxy?.close();
   netProxy = null;
@@ -178,13 +179,22 @@ function expandHome(p: string): string {
   return p; // `~user/...` left as-is
 }
 
+async function pathExists(p: string): Promise<boolean> {
+  try {
+    await accessPath(p);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function wrapInBwrap(command: string, cwd: string, t: Tier): Promise<string> {
   const args: string[] = ["bwrap", "--ro-bind", "/", "/"]; // read-only root
   if (t !== "readonly") {
     args.push("--bind", cwd, cwd); // project dir writable
     for (const dir of config.writableDirs) {
       const abs = expandHome(dir);
-      if (existsSync(abs)) args.push("--bind", abs, abs);
+      if (await pathExists(abs)) args.push("--bind", abs, abs);
     }
   }
   args.push(

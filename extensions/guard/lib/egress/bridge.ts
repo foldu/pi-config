@@ -18,7 +18,7 @@
 import { spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { access, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { quote } from "shell-quote";
@@ -37,17 +37,26 @@ export const SANDBOX_SOCKS_PORT = 1080;
 
 const SOCKET_READY_TIMEOUT_MS = 8000;
 
+async function pathExists(p: string): Promise<boolean> {
+  try {
+    await access(p);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Remove bridge dirs left behind by crashed pi processes. Each dir records
  * the socat PIDs that own it; when all of them are dead the bridges are
  * useless (their host proxies died with pi) and can be swept. Safe under
  * concurrent pi instances: a live instance's dir has live socat PIDs.
  */
-export function sweepStaleBridges(): void {
+export async function sweepStaleBridges(): Promise<void> {
   const base = join(homedir(), ".cache", "guard", "net");
   let dirs: string[] = [];
   try {
-    dirs = readdirSync(base);
+    dirs = await readdir(base);
   } catch {
     return; // no net dir yet
   }
@@ -55,7 +64,7 @@ export function sweepStaleBridges(): void {
     const dir = join(base, name);
     let pids: number[] = [];
     try {
-      pids = readFileSync(join(dir, "pids"), "utf8")
+      pids = (await readFile(join(dir, "pids"), "utf8"))
         .split("\n")
         .map((line) => Number(line.trim()))
         .filter((pid) => pid > 0);
@@ -73,7 +82,7 @@ export function sweepStaleBridges(): void {
     });
     if (!anyAlive) {
       try {
-        rmSync(dir, { recursive: true, force: true });
+        await rm(dir, { recursive: true, force: true });
       } catch {
         /* best effort */
       }
@@ -85,9 +94,9 @@ export async function startBridge(proxyPorts: {
   httpPort: number;
   socksPort: number;
 }): Promise<NetBridge> {
-  sweepStaleBridges();
+  await sweepStaleBridges();
   const dir = join(homedir(), ".cache", "guard", "net", randomBytes(8).toString("hex"));
-  mkdirSync(dir, { recursive: true });
+  await mkdir(dir, { recursive: true });
   const httpSocketPath = join(dir, "http.sock");
   const socksSocketPath = join(dir, "socks.sock");
 
@@ -107,14 +116,14 @@ export async function startBridge(proxyPorts: {
   }
   // Record the socat PIDs so a later instance can sweep this dir if pi crashed.
   try {
-    writeFileSync(join(dir, "pids"), procs.map((p) => p.pid ?? 0).filter((pid) => pid > 0).join("\n") + "\n");
+    await writeFile(join(dir, "pids"), procs.map((p) => p.pid ?? 0).filter((pid) => pid > 0).join("\n") + "\n");
   } catch {
     /* best effort */
   }
 
   const deadline = Date.now() + SOCKET_READY_TIMEOUT_MS;
   while (Date.now() < deadline) {
-    if (existsSync(httpSocketPath) && existsSync(socksSocketPath)) {
+    if ((await pathExists(httpSocketPath)) && (await pathExists(socksSocketPath))) {
       return {
         httpSocketPath,
         socksSocketPath,
@@ -135,11 +144,11 @@ export async function startBridge(proxyPorts: {
       /* already gone */
     }
   }
-  rmSync(dir, { recursive: true, force: true });
+  await rm(dir, { recursive: true, force: true }).catch(() => {});
   throw new Error("socat bridge failed to create sockets (is socat installed?)");
 }
 
-export function stopBridge(bridge: NetBridge | null): void {
+export async function stopBridge(bridge: NetBridge | null): Promise<void> {
   if (!bridge) return;
   for (const p of bridge.processes) {
     try {
@@ -149,7 +158,7 @@ export function stopBridge(bridge: NetBridge | null): void {
     }
   }
   try {
-    rmSync(bridge.dir, { recursive: true, force: true });
+    await rm(bridge.dir, { recursive: true, force: true });
   } catch {
     /* best effort */
   }

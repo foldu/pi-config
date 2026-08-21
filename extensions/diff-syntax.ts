@@ -17,7 +17,7 @@
  * changes. The built-in `renderCall` (live previews) is kept as-is.
  */
 
-import { readFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { Text } from "@earendil-works/pi-tui";
 import {
@@ -108,7 +108,7 @@ export default function (pi: ExtensionAPI) {
       const input = event.input as { path: string; content: string; file_path?: string };
       const rawPath = String(input.file_path ?? input.path ?? "");
       try {
-        writeOldContent.set(event.toolCallId, readFileSync(resolve(ctx.cwd, rawPath), "utf8"));
+        writeOldContent.set(event.toolCallId, await readFile(resolve(ctx.cwd, rawPath), "utf8"));
       } catch {
         // file doesn't exist yet — new file, no diff
       }
