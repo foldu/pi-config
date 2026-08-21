@@ -12,7 +12,7 @@ There are three layers, trying to reduce possible fallout:
 
 ## The three components
 
-### 1. Judge — CARE
+### 1. Judge: CARE
 
 A static pre-execution verifier, ported from
 [CARE](https://github.com/prisma-research/CARE) — _"CARE: Pre-Execution Command
@@ -26,14 +26,14 @@ differently.
 This is the soft security boundary, that makes the monke in the loop work less, so he
 doesn't get approval fatigue.
 
-### 2. Sandbox — bwrap
+### 2. Sandbox: bwrap
 
 Containment for approved bash commands. Each command runs inside bubblewrap.
 
 The hard security boundary. Stops fallout from bad commands that weren't found by
 the judge. 
 
-This needs some 
+TODO: not strict enough
 
 ### 3. Prompting: monke in the loop
 
