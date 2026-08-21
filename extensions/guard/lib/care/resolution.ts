@@ -24,8 +24,12 @@ export function resolveSkip(r: AnalysisResult): { skip: boolean; reason: string 
       return { skip: true, reason: `p_rule:${m.ruleId}` };
     }
   }
-  // p_spath: sensitive-location access.
-  if (r.triggeredLayers.includes("L3_Path")) {
+  // p_spath (paper Eq. 11): write-context access to a protected path, or any
+  // access to a secret-bearing path. The path layer scores those >= 0.7
+  // (sensitive_write=0.7, secret=0.85, critical/destructive=1.0). Milder hits
+  // (sensitive_read=0.1, path traversal=0.3-0.5) must NOT skip — they stay WARN
+  // for the human, not auto-DENY.
+  if (r.details.path.score >= 0.7) {
     return { skip: true, reason: "p_spath" };
   }
   // p_sem: high-risk L2 semantic class.

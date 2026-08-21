@@ -106,6 +106,20 @@ describe("resolution skip predicates (Stage 3)", () => {
     assert.match(f.skipReason ?? "", /^p_sem:/);
   });
 
+  it("does not skip a mild path-traversal WARN (p_spath is narrow)", () => {
+    const r = analyze("nix-build ../foo.nix");
+    const f = resolve(r);
+    assert.equal(f.decision, "WARN", JSON.stringify({ score: r.score, layers: r.triggeredLayers }));
+    assert.equal(f.skipReason, null);
+  });
+
+  it("promotes a protected-write WARN to DENY (p_spath)", () => {
+    const r = analyze("tee /etc/foo");
+    const f = resolve(r);
+    assert.equal(f.decision, "DENY");
+    assert.equal(f.skipReason, "p_spath");
+  });
+
   it("leaves a benign cross-host transfer at WARN for the human judge", () => {
     const r = analyze("rsync -avz ./data user@host:/backup/");
     const f = resolve(r);
