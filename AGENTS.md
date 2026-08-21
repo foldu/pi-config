@@ -34,3 +34,16 @@ Notes:
 - Type errors are not merely cosmetic: they can reveal stale schemas. Example:
   `diff-syntax.ts` read `event.input.file_path`, which the write tool schema dropped
   in favor of `path` — the typecheck caught the dead branch.
+
+## CARE extension tests
+
+The `extensions/care/` extension is self-contained (its own `package.json` +
+`node_modules`, like `extensions/sandbox/`). After editing anything under
+`extensions/care/`, run its tests:
+
+```sh
+cd extensions/care && npm test
+```
+
+This runs the `node:test` suite (`node --test`). Run both this and the repo typecheck
+before finishing CARE work.

@@ -1,0 +1,99 @@
+// L2 semantic lexicon — command head → default RiskClass.
+import type { RiskClass } from "./types.ts";
+
+function mapOf(names: readonly string[], cls: RiskClass): Map<string, RiskClass> {
+  const m = new Map<string, RiskClass>();
+  for (const n of names) m.set(n, cls);
+  return m;
+}
+
+export const COMMAND_CLASSES: Map<string, RiskClass> = new Map([
+  ...mapOf(
+    [
+      "cat", "head", "tail", "less", "more", "wc", "nl", "od", "hexdump", "xxd", "strings",
+      "grep", "egrep", "fgrep", "rg", "ag", "ack",
+      "find", "locate", "which", "whereis", "type", "command",
+      "ls", "ll", "dir", "tree", "file", "stat", "readlink", "realpath",
+      "pwd", "whoami", "id", "groups", "w", "who", "last", "tty",
+      "uname", "hostname", "date", "uptime", "cal", "lsb_release",
+      "df", "du", "free", "top", "htop", "atop", "iotop",
+      "env", "printenv", "echo", "printf", "yes",
+      "diff", "cmp", "comm", "sort", "uniq", "cut", "tr", "awk", "sed",
+      "jq", "yq", "xmllint", "column", "paste", "join", "tac", "rev",
+      "man", "help", "info", "tldr", "whatis",
+      "md5sum", "sha1sum", "sha256sum", "sha512sum", "b2sum", "cksum",
+      "true", "false", "test", "[",
+      "history",
+      "bc", "dc", "seq", "expr", "sleep",
+      "ping", "traceroute", "mtr", "host", "dig", "nslookup",
+      "ps", "pgrep", "pidof", "jobs", "pstree",
+    ],
+    "READ_ONLY",
+  ),
+  ...mapOf(
+    [
+      "cp", "mv", "mkdir", "touch", "ln",
+      "tar", "zip", "unzip", "gzip", "gunzip", "bzip2", "xz", "7z", "zstd",
+      "tee",
+      "make", "cmake", "gradle", "mvn", "ant", "ninja", "bazel",
+      "pip", "pip3", "npm", "yarn", "pnpm", "cargo", "go", "poetry",
+      "python", "python3", "node", "ruby", "perl", "php", "lua",
+      "git",
+      "docker", "podman", "docker-compose",
+      "kubectl", "helm",
+      "export", "alias", "unalias",
+      "pytest", "tox", "nose2", "rspec", "jest", "mocha", "vitest",
+      "gcc", "g++", "clang", "javac", "rustc", "tsc",
+      "vi", "vim", "nvim", "nano", "emacs",
+    ],
+    "WRITE_LOCAL",
+  ),
+  ...mapOf(
+    ["curl", "wget", "httpie", "aria2c", "rsync", "scp", "sftp", "ftp",
+      "apt", "apt-get", "yum", "dnf", "pacman", "brew", "snap", "flatpak"],
+    "NETWORK_FETCH",
+  ),
+  ...mapOf(
+    ["bash", "sh", "zsh", "dash", "ksh", "csh", "tcsh", "ash", "exec", "source", "."],
+    "EXECUTION_CHAIN",
+  ),
+  ...mapOf(
+    ["sudo", "su", "doas", "pkexec", "chmod", "chown", "chgrp", "setcap", "getcap",
+      "visudo", "passwd", "chpasswd", "useradd", "userdel", "usermod",
+      "groupadd", "groupdel", "groupmod", "newgrp", "adduser", "deluser"],
+    "PRIVILEGE_OR_PERMISSION",
+  ),
+  ...mapOf(
+    ["crontab", "at", "batch", "anacron", "systemctl", "service", "update-rc.d", "chkconfig", "launchctl"],
+    "PERSISTENCE",
+  ),
+  ...mapOf(
+    ["rm", "rmdir", "dd", "mkfs", "mkfs.ext4", "mkfs.ext3", "mkfs.xfs", "mkfs.btrfs", "mkfs.vfat",
+      "fdisk", "parted", "gdisk", "sgdisk", "cfdisk", "shred", "wipe", "wipefs", "blkdiscard", "truncate"],
+    "DESTRUCTIVE",
+  ),
+  ...mapOf(
+    ["kill", "killall", "pkill", "shutdown", "reboot", "halt", "poweroff", "init", "telinit",
+      "stress", "stress-ng", "fallocate", "nmap", "hping3", "masscan"],
+    "RESOURCE_ABUSE",
+  ),
+  // Placeholder sensitive/net utilities — most are routed via path boost rather
+  // than command head. Mapped to NETWORK_FETCH here, matching the reference.
+  ...mapOf(["nc", "ncat", "netcat", "ssh"], "NETWORK_FETCH"),
+]);
+
+export const GIT_SUBCOMMAND_CLASSES: Map<string, RiskClass> = new Map([
+  ...mapOf(
+    ["status", "log", "diff", "show", "blame", "branch", "remote", "stash",
+      "ls-files", "describe", "shortlog", "reflog", "config"],
+    "READ_ONLY",
+  ),
+  ...mapOf(
+    ["add", "commit", "checkout", "switch", "merge", "rebase", "cherry-pick",
+      "am", "apply", "init", "fetch", "pull", "clone", "tag"],
+    "WRITE_LOCAL",
+  ),
+  ["push", "WRITE_LOCAL"],
+  ["reset", "WRITE_LOCAL"],
+  ["clean", "WRITE_LOCAL"],
+]);
