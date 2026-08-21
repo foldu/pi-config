@@ -1,0 +1,31 @@
+{
+  // Editor-only config: makes Zed/VS Code/tsc resolve pi extension types.
+  // Extensions are NOT compiled — pi runs them via jiti at runtime.
+  "compilerOptions": {
+    "target": "esnext",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "lib": ["esnext"],
+    // node:fs, node:child_process, etc.
+    "types": ["node"],
+    // @types lives in npm/node_modules, which isn't on the standard walk-up path
+    "typeRoots": ["./npm/node_modules/@types"],
+    // Same for the pi packages + shell-quote (installed as devDependencies in npm/)
+    "paths": {
+      "@earendil-works/*": ["./npm/node_modules/@earendil-works/*"],
+      "typebox": ["./npm/node_modules/typebox"],
+      "shell-quote": ["./npm/node_modules/shell-quote"]
+    },
+    // Extensions import each other with explicit .ts extensions (../lib/bash-format.ts)
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["extensions/**/*.ts", "lib/**/*.ts"],
+  "exclude": ["npm", "node_modules", "sessions"]
+}

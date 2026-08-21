@@ -1,0 +1,19 @@
+{
+  "name": "pi-extensions",
+  "private": true,
+  "scripts": {
+    "typecheck": "tsc --noEmit -p ../tsconfig.json"
+  },
+  "dependencies": {
+    "pi-mcp-adapter": "^2.26.1",
+    "pi-powerline-footer": "^0.15.1",
+    "pi-web-access": "^0.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@earendil-works/pi-coding-agent": "0.84.1",
+    "@earendil-works/pi-tui": "0.84.1",
+    "shell-quote": "^1.8.2",
+    "typescript": "^7.0.2"
+  }
+}

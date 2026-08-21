@@ -4,7 +4,6 @@ auth.json
 sessions/
 
 # packaages
-npm/
 git/
 node_modules/
 
