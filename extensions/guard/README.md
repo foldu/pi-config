@@ -47,6 +47,9 @@ that the LLM doesn't read shell history or w/e.
 To assure that the monke at least pretends to read the edits to the codebase,
 all writes and edits are prompted for.
 
+Another important feature is that the bash scripts that get displayed to the user are formatted
+via shfmt, because LLMs like to produce code golfed scripts that are hard to read for monke.
+
 ## Safety tiers
 
 TODO

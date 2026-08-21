@@ -30,7 +30,7 @@ Notes:
 - `npm/` is gitignored, so if `npm/package.json` is missing on a fresh checkout,
   re-add the devDependencies above and run `npm install` in `npm/`.
 - Extensions may import each other with explicit `.ts` extensions
-  (`import ... from "../lib/bash-format.ts"`) — `allowImportingTsExtensions` is set.
+  (`import { analyze } from "./lib/care/engine.ts"`) — `allowImportingTsExtensions` is set.
 - Type errors are not merely cosmetic: they can reveal stale schemas. Example:
   `diff-syntax.ts` read `event.input.file_path`, which the write tool schema dropped
   in favor of `path` — the typecheck caught the dead branch.

@@ -18,11 +18,13 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { quote } from "shell-quote";
 import { parse as parseJsonc, type ParseError } from "jsonc-parser";
-import { isToolCallEventType } from "@earendil-works/pi-coding-agent";
+import { isToolCallEventType, createLocalBashOperations } from "@earendil-works/pi-coding-agent";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { Text } from "@earendil-works/pi-tui";
+import { Type } from "typebox";
 import { analyze } from "./lib/care/engine.ts";
 import { resolve as resolveCare } from "./lib/care/resolution.ts";
-import { formatBashCommand } from "../../lib/bash-format.ts";
+import { formatBashCommand } from "./lib/bash-format.ts";
 import type { AnalysisResult, Decision } from "./lib/care/types.ts";
 import { canonical, isReadAllowed } from "./lib/paths.ts";
 
@@ -235,10 +237,8 @@ async function handleBash(event: any, ctx: any) {
     if (!ok) return { block: true, reason: "User denied the command" };
   }
 
-  // wrap in the sandbox (except in `off`)
-  if (tier !== "off" && !cmd.trim().startsWith("bwrap")) {
-    event.input.command = wrapInBwrap(cmd, ctx.cwd, tier);
-  }
+  // Approved — the custom bash tool wraps in the sandbox at execution time,
+  // so the tool row shows the readable, un-wrapped command.
   return undefined;
 }
 
@@ -284,6 +284,19 @@ async function handleNonBash(event: any, ctx: any) {
 // extension entry
 // ---------------------------------------------------------------------------
 
+const MAX_BYTES = 50 * 1024;
+
+const bashSchema = Type.Object({
+  command: Type.String({ description: "Bash command to execute" }),
+  timeout: Type.Optional(
+    Type.Number({ description: "Timeout in seconds (optional, no default timeout)" }),
+  ),
+});
+
+function appendStatus(text: string, status: string): string {
+  return `${text ? `${text}\n\n` : ""}${status}`;
+}
+
 export default function (pi: ExtensionAPI) {
   pi.registerCommand("guard", {
     description: "Set the safety tier: /guard off|on|net|readonly (no arg toggles off/on)",
@@ -304,6 +317,72 @@ export default function (pi: ExtensionAPI) {
         ctx.ui.notify(`Unknown tier "${args}" — usage: /guard off|on|net|readonly`, "warning");
       }
     },
+  });
+
+  pi.registerTool({
+    name: "bash", // overrides the built-in bash tool
+    label: "bash",
+    description:
+      "Execute a bash command in the current working directory. Returns stdout and stderr. Output is truncated to last 50KB. Optionally provide a timeout in seconds.",
+    promptSnippet: "Execute bash commands (ls, grep, find, etc.)",
+    promptGuidelines: [
+      "You can inspect PI_* environment variables for current model and session details.",
+    ],
+    parameters: bashSchema,
+
+    async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+      // Wrap in the sandbox at execution time (tier != off). The command shown
+      // in the tool row stays the readable original.
+      let command = params.command;
+      if (tier !== "off" && !command.trim().startsWith("bwrap")) {
+        command = wrapInBwrap(command, ctx.cwd, tier);
+      }
+      const ops = createLocalBashOperations();
+      let output = "";
+      const onData = (data: Buffer) => {
+        output += data.toString();
+      };
+
+      let exitCode: number | null = null;
+      try {
+        ({ exitCode } = await ops.exec(command, ctx.cwd, {
+          onData,
+          signal,
+          timeout: params.timeout,
+        }));
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        if (message === "aborted") {
+          throw new Error(appendStatus(output, "Command aborted"));
+        }
+        if (message.startsWith("timeout:")) {
+          const seconds = message.split(":")[1];
+          throw new Error(appendStatus(output, `Command timed out after ${seconds} seconds`));
+        }
+        throw err;
+      }
+
+      let text = output;
+      if (Buffer.byteLength(text, "utf8") > MAX_BYTES) {
+        text = text.slice(-MAX_BYTES) + "\n\n[Output truncated at 50KB]";
+      }
+      if (text.length === 0) text = "(no output)";
+      if (exitCode !== 0 && exitCode !== null) {
+        throw new Error(appendStatus(text, `Command exited with code ${exitCode}`));
+      }
+      return { content: [{ type: "text", text }], details: undefined };
+    },
+
+    // Show the shfmt-formatted original command in the tool row; the sandbox
+    // wrapping happens inside execute (see above), so this stays readable.
+    renderCall(args, theme, context) {
+      const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
+      const formatted = formatBashCommand(args.command);
+      const timeoutSuffix = args.timeout ? theme.fg("muted", ` (timeout ${args.timeout}s)`) : "";
+      text.setText(theme.fg("toolTitle", theme.bold(`$ ${formatted}`)) + timeoutSuffix);
+      return text;
+    },
+    // renderResult omitted → built-in bash result rendering is inherited
   });
 
   pi.on("session_start", (_event, ctx) => {
