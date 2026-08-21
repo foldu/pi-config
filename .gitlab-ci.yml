@@ -1,0 +1,27 @@
+default:
+  image: node:24
+  timeout: 10 minutes
+
+cache:
+  key:
+    files:
+      - npm/package-lock.json
+      - extensions/guard/package-lock.json
+  paths:
+    - npm/node_modules/
+    - extensions/guard/node_modules/
+
+typecheck:
+  needs: []
+  script:
+    # --ignore-scripts: all deps are pure JS (no postinstall needed) — makes
+    # installs deterministic and sidesteps npm 11's retarded allow-scripts approval.
+    - npm --prefix npm ci --ignore-scripts
+    - npm --prefix extensions/guard ci --ignore-scripts
+    - npm --prefix npm run typecheck
+
+guard-tests:
+  needs: []
+  script:
+    - npm --prefix extensions/guard ci --ignore-scripts
+    - npm --prefix extensions/guard test
