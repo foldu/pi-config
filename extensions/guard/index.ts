@@ -245,17 +245,31 @@ async function handleNonBash(event: any, ctx: any) {
   if (!ctx.hasUI) {
     return { block: true, reason: `Blocked: no UI to confirm tool "${event.toolName}"` };
   }
-  let preview: string;
-  try {
-    preview = JSON.stringify(event.input);
-  } catch {
-    preview = String(event.input);
+
+  // read/write/edit show only the file path (resolved); other tools show the JSON.
+  const fileAction: Record<string, string> = {
+    read: "reading",
+    write: "writing",
+    edit: "editing",
+  };
+  const action = fileAction[event.toolName];
+  let title: string;
+  if (action) {
+    const rawPath = String((event.input as { path?: string }).path ?? "");
+    const resolved = await canonical(ctx.cwd, rawPath);
+    title = `Allow ${action} this file?\n\n${resolved}`;
+  } else {
+    let preview: string;
+    try {
+      preview = JSON.stringify(event.input, null, 2);
+    } catch {
+      preview = String(event.input);
+    }
+    if (preview.length > 1000) preview = preview.slice(0, 1000) + "\n…";
+    title = `Allow tool call?\n\nTool: ${event.toolName}\nInput:\n${preview}`;
   }
-  if (preview.length > 500) preview = preview.slice(0, 500) + "…";
-  const choice = await ctx.ui.select(
-    `Allow tool call?\n\nTool: ${event.toolName}\nInput: ${preview}`,
-    ["Allow", "Disallow"],
-  );
+
+  const choice = await ctx.ui.select(title, ["Allow", "Disallow"]);
   if (choice !== "Allow") return { block: true, reason: `User denied tool "${event.toolName}"` };
   return undefined;
 }
