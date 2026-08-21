@@ -25,7 +25,7 @@ import { Type } from "typebox";
 import { analyze } from "./lib/care/engine.ts";
 import { resolve as resolveCare } from "./lib/care/resolution.ts";
 import { formatBashCommand } from "./lib/bash-format.ts";
-import type { AnalysisResult, Decision } from "./lib/care/types.ts";
+import type { AnalysisResult, Decision, RiskClass } from "./lib/care/types.ts";
 import { canonical, isReadAllowed } from "./lib/paths.ts";
 
 // ---------------------------------------------------------------------------
@@ -155,7 +155,7 @@ function matchesPath(paths: string[], cmd: string): boolean {
   return paths.some((p) => p.length > 0 && cmd.includes(p));
 }
 
-/** Human-readable one-line evidence for the dialog / block reason. */
+/** Human-readable one-line evidence for the dialog. */
 function summarize(r: AnalysisResult): string {
   const bits: string[] = [];
   const cls = r.details.semanticMaxClass;
@@ -165,6 +165,71 @@ function summarize(r: AnalysisResult): string {
   }
   for (const rule of r.firedRules.slice(0, 4)) bits.push(rule.description);
   return bits.length > 0 ? bits.join(" · ") : "no specific evidence";
+}
+
+/** Short plain-English meaning of each risk class (for LLM-readable reasons). */
+const CLASS_MEANING: Partial<Record<RiskClass, string>> = {
+  READ_ONLY: "reads data",
+  WRITE_LOCAL: "writes to project/local files",
+  WRITE_SENSITIVE: "writes to sensitive locations (config, secrets, system dirs)",
+  NETWORK_FETCH: "fetches from the network",
+  EXECUTION_CHAIN: "builds a command from mutable or untrusted input",
+  PRIVILEGE_OR_PERMISSION: "needs elevated privileges or changes permissions",
+  PERSISTENCE: "installs, enables, or auto-starts something persistent",
+  DESTRUCTIVE: "can destroy data (delete, overwrite, format)",
+  RESOURCE_ABUSE: "consumes excessive resources or network traffic",
+  UNKNOWN: "unrecognized behavior",
+};
+
+function shortenCmd(cmd: string, max = 300): string {
+  return cmd.length > max ? `${cmd.slice(0, max)}…` : cmd;
+}
+
+/**
+ * LLM-readable block reason: states the command was NOT executed, which command,
+ * why it is risky, why it became a hard block (score band vs. skip predicate),
+ * and what to do.
+ */
+function explainBlock(
+  cmd: string,
+  r: AnalysisResult,
+  f: { decision: Decision; skipReason: string | null },
+): string {
+  const cls = r.details.semanticMaxClass;
+  const clsNote =
+    cls && cls !== "READ_ONLY" && cls !== "UNKNOWN"
+      ? `risk class "${cls.replace(/_/g, " ").toLowerCase()}" — ${CLASS_MEANING[cls] ?? "high risk"}`
+      : null;
+  const pathNote =
+    r.details.path.reason && r.details.path.reason !== "paths_ok"
+      ? `path issue: ${r.details.path.reason.replace(/_/g, " ")}`
+      : null;
+  const ruleNotes = r.firedRules
+    .slice(0, 4)
+    .map((rule) => `rule ${rule.ruleId} (${rule.description})`);
+  const why =
+    [clsNote, pathNote, ...ruleNotes].filter(Boolean).join("; ") || "no specific evidence";
+
+  let escalation: string;
+  if (f.skipReason === "p_spath") {
+    escalation = "promoted to a hard block because it touches a protected or secret path";
+  } else if (f.skipReason === "p_sem") {
+    escalation = `promoted to a hard block because "${cls ? cls.replace(/_/g, " ").toLowerCase() : "high-risk"}" is always blocked regardless of score`;
+  } else if (f.skipReason?.startsWith("p_rule")) {
+    escalation = `promoted to a hard block because it matches high-confidence MITRE-backed rule ${f.skipReason.slice("p_rule:".length)}`;
+  } else if (f.decision === "DENY" && r.score >= 0.35) {
+    escalation = "the score is above the hard-deny threshold";
+  } else {
+    escalation = "blocked by the current policy";
+  }
+
+  return [
+    `CARE blocked: the command was NOT executed.`,
+    `Blocked command: ${shortenCmd(cmd)}`,
+    `Score: ${r.score.toFixed(2)} — ${escalation}.`,
+    `Why: ${why}.`,
+    "This is a hard block in every safety tier; retrying will not help. If the command is intentional and safe, ask the user to approve it or add an override in guard.jsonc.",
+  ].join("\n");
 }
 
 /** Read-context head with no write/redirect/tee/sed -i. */
@@ -214,17 +279,28 @@ async function handleBash(event: any, ctx: any) {
 
   // DENY — hard block in every tier
   if (decision === "DENY") {
-    return { block: true, reason: `CARE blocked (score ${r.score}): ${summarize(r)}` };
+    const viaOverride =
+      config.overrides.denyHeads.includes(head) || matchesPath(config.overrides.denyPaths, cmd);
+    const reason = viaOverride
+      ? `CARE blocked: the command was NOT executed. Your guard override denies it (matches denyHeads/denyPaths). Blocked command: ${shortenCmd(cmd)}. Ask the user to adjust guard.jsonc if this was not intended.`
+      : explainBlock(cmd, r, f);
+    return { block: true, reason };
   }
 
   // readonly tier — write-context commands are blocked
   if (tier === "readonly" && !isPureRead(cmd, r)) {
-    return { block: true, reason: "Read-only mode: command writes" };
+    return {
+      block: true,
+      reason: `CARE blocked: the command was NOT executed. Tier is "readonly", which forbids writes. Blocked command: ${shortenCmd(cmd)}`,
+    };
   }
 
   // warnPolicy deny — treat WARN like DENY
   if (decision === "WARN" && config.warnPolicy === "deny") {
-    return { block: true, reason: `CARE blocked (warn): ${summarize(r)}` };
+    return {
+      block: true,
+      reason: `CARE blocked: the command was NOT executed. warnPolicy is "deny", so warnings are treated as blocks. ${explainBlock(cmd, r, f)}`,
+    };
   }
 
   // auto-allow: only when contained (tier !== off), for ALLOW or clearly-read WARN
