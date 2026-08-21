@@ -37,6 +37,7 @@ export const COMMAND_CLASSES: Map<string, RiskClass> = new Map([
       "tee",
       "make", "cmake", "gradle", "mvn", "ant", "ninja", "bazel",
       "pip", "pip3", "npm", "yarn", "pnpm", "cargo", "go", "poetry",
+      "nix", "nix-build", "nix-shell", "nix-env", "nix-collect-garbage",
       "python", "python3", "node", "ruby", "perl", "php", "lua",
       "git",
       "docker", "podman", "docker-compose",
@@ -60,7 +61,8 @@ export const COMMAND_CLASSES: Map<string, RiskClass> = new Map([
   ...mapOf(
     ["sudo", "su", "doas", "pkexec", "chmod", "chown", "chgrp", "setcap", "getcap",
       "visudo", "passwd", "chpasswd", "useradd", "userdel", "usermod",
-      "groupadd", "groupdel", "groupmod", "newgrp", "adduser", "deluser"],
+      "groupadd", "groupdel", "groupmod", "newgrp", "adduser", "deluser",
+      "nixos-rebuild"],
     "PRIVILEGE_OR_PERMISSION",
   ),
   ...mapOf(

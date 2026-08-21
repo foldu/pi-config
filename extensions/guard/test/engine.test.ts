@@ -106,6 +106,15 @@ describe("resolution skip predicates (Stage 3)", () => {
     assert.match(f.skipReason ?? "", /^p_sem:/);
   });
 
+  it("classifies nix as low-risk and nixos-rebuild as hard-denied", () => {
+    assert.equal(analyze("nix build").decision, "ALLOW");
+    const r = analyze("nixos-rebuild switch");
+    assert.equal(r.decision, "WARN", JSON.stringify({ score: r.score }));
+    const f = resolve(r);
+    assert.equal(f.decision, "DENY"); // hard-block; only an override lifts it
+    assert.match(f.skipReason ?? "", /^p_sem:/);
+  });
+
   it("does not skip a mild path-traversal WARN (p_spath is narrow)", () => {
     const r = analyze("nix-build ../foo.nix");
     const f = resolve(r);
