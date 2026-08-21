@@ -39,6 +39,18 @@
       "default": ["~/.cargo", "~/.rustup", "~/.cache", "~/.local/share", "~/.config", "~/.npm"],
       "description": "Directories (supports a leading ~) bound writable inside the bwrap sandbox. Everything else stays read-only; the project directory is always writable in the on/net tiers. Ignored in the readonly tier."
     },
+    "allowedHosts": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": [],
+      "description": "Hosts the `on` tier may reach (pre-approved; everything else prompts the human, denied by default with no UI). Patterns: exact hostnames, `*.domain` wildcards, optional `:port` suffix (e.g. `github.com`, `*.github.com`, `github.com:443`). The `on` tier is always proxy-only egress — with an empty list, every host prompts. Ignored in `net` (unrestricted) and in the no-network tiers."
+    },
+    "deniedHosts": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": [],
+      "description": "Hosts always denied, checked before allowedHosts (no prompt). Same pattern syntax. A bare `*` here denies everything."
+    },
     "overrides": {
       "type": "object",
       "additionalProperties": false,

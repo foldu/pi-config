@@ -95,12 +95,12 @@ Order matters — DENY wins over everything, and auto-allow depends on the activ
    prompt, no human override, in *every* tier. The only way to lift a DENY is a
    deliberate, persistent `overrides` entry in `guard.jsonc` (audited, not one-click).
 3. **WARN** → escalate to the user (permission dialog with the evidence summary).
-4. **ALLOW** → auto-allow (no prompt) in the `on` tier; prompt in `off`; in `net`,
-   network-fetch commands never auto-allow.
+4. **ALLOW** → auto-allow (no prompt) in the `on`/`net`/`isolated` tiers; prompt in `off`;
+   in `net` (unrestricted network), network-fetch commands never auto-allow.
 5. **Read-only auto-allow** is a *narrow* predicate, not "no writes": it excludes
    network egress, secret-tier paths, sink pipes, and interpreter-script execution
-   (`bash file`, `source file`, `. file`, `sh file`). It applies in `on`/`net`; in
-   `readonly`, the whole tier is "reads only".
+   (`bash file`, `source file`, `. file`, `sh file`). It applies in `on`/`net`/`isolated`;
+   in `readonly`, the whole tier is "reads only".
 6. The auto-allow policy applies *only* when CARE did not DENY.
 
 ## Config file (`guard.jsonc`)
@@ -125,7 +125,7 @@ Sketch (see [`safety-tiers.md`](safety-tiers.md) for the full tier model):
 }
 ```
 
-- `defaultTier`: `off` | `on` | `net` | `readonly` — the tier at startup.
+- `defaultTier`: `off` | `on` | `net` | `isolated` | `readonly` — the tier at startup.
 - `mode`: `strict` | `balanced` | `auto` (decision thresholds, retuned in the soak).
 - `warnPolicy`: `prompt` (human judge, default) | `deny` (treat WARN like DENY). Never
   an LLM.
@@ -283,7 +283,7 @@ A skeptical pass over the plan. Grouped by resolution status.
   CARE only covers `bash`. `write ~/.ssh/authorized_keys` or planting a script for later
   `bash script.sh` is outside the guard. Ask-permission still prompts for these (no
   auto-allow) — that's the only gate. Worth extending path-sensitivity to them later.
-- **Allowlist overrides are coarse bypasses.** `allowHeads: ["git"]` also allows
+- **Whitelist overrides are coarse bypasses.** `allowHeads: ["git"]` also allows
   GTFOBins' `git` tricks. Prefer head+subcommand patterns and audit them.
 
 ### Not worth fixing now

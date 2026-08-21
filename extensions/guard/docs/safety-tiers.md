@@ -1,6 +1,6 @@
 # Safety tiers
 
-The guard operates in one of four **tiers**. A tier sets two things at once —
+The guard operates in one of five **tiers**. A tier sets two things at once —
 **containment** (how the command is sandboxed) and the **approval policy** (how CARE's
 ALLOW / WARN / DENY verdict maps to auto-allow / prompt / block) — so the trust you
 place in the environment and the trust you place in the machine's grading move together,
@@ -21,9 +21,10 @@ is auto-allowed."
 | Tier | bwrap sandbox | Network | ALLOW | WARN | DENY |
 |------|---------------|---------|-------|------|------|
 | `off` | none — real host | host | prompt | prompt | block |
-| `on` (default) | on, RO root + writable caches | off | auto | prompt | block |
-| `net` | on | **on** | auto | prompt | block |
-| `readonly` | on, **everything RO** | off | auto (reads) | prompt (reads) | block (writes too) |
+| `on` (default) | on, RO root + writable caches | **whitelist** (new hosts prompt) | auto | prompt | block |
+| `net` | on | **full host** | auto | prompt | block |
+| `isolated` | on | **none** | auto | prompt | block |
+| `readonly` | on, **everything RO** | none | auto (reads) | prompt (reads) | block (writes too) |
 
 ### `off` — no containment, everything asked
 
@@ -32,28 +33,43 @@ is auto-allowed."
 - **ALLOW and WARN both prompt.** There is no auto-allow of any kind — not the CARE
   ALLOW band, not the read-only rule — because there is no containment backstop. The
   read-only narrow auto-allow is disabled in this tier.
-- This is the tier to use when a task genuinely needs the host (e.g. `nixos-rebuild`,
-  `docker` on the real daemon), and the price is that every command is reviewed.
+- This is the tier to use when a task genuinely needs the host unrestricted
+  (e.g. `nixos-rebuild`, `docker` on the real daemon), and the price is that every
+  command is reviewed.
 
-### `on` — the default, contained + CARE-graded
+### `on` — the default: whitelisted network, new hosts prompt
 
 - bwrap with read-only root, the project dir + `WRITABLE_DIRS` bound writable, the real
   `/tmp` and `/var/tmp` bound writable (persistent across commands, not a fresh tmpfs),
-  no network, pid/ipc/uts namespaces, `--cap-drop ALL`.
+  pid/ipc/uts namespaces, `--cap-drop ALL`.
+- **Network is proxy-only egress.** The sandbox gets `--unshare-net` (zero interfaces),
+  and every connection is forced through host-side HTTP + SOCKS5 proxies (reached via
+  socat Unix-socket bridges bound into the sandbox, with standard proxy env vars set).
+  The proxies enforce `allowedHosts` / `deniedHosts` (patterns: `github.com`,
+  `*.github.com`, `:port` suffix, `*`), and **hosts matching neither list prompt the
+  human** (Allow/Deny, remembered for the pi process; fail closed headless). Nothing can
+  bypass the filter — IP literals, DoH, and raw sockets all die at the missing network
+  interfaces. An *empty* `allowedHosts` means every host prompts.
+- Requires `socat` (already a guard dependency; fails closed — no egress — if it's
+  missing).
 - CARE grading: **ALLOW → auto-allow**, **WARN → prompt** (the human judge),
   **DENY → block**.
 - The read-only narrow auto-allow also applies: commands that only read data (read-context
   head, no writes/redirections, no secret paths, no sink pipes, no interpreter-script
   execution) are auto-allowed even if CARE would otherwise land them in WARN.
-- Network-fetch commands *may* auto-allow here — the sandbox has no network, so the
-  command can't exfiltrate; it just fails if it needs the network.
 
-### `net` — contained, with the network reachable
+### `net` — the escape hatch: unrestricted network
 
-- Identical bwrap to `on`, minus `--unshare-net`.
-- Grading is identical to `on`: ALLOW auto-allows, WARN prompts, DENY blocks. No
-  network-fetch special-casing — the bwrap sandbox is the containment: sensitive dirs
-  stay read-only, so a network command can't exfiltrate files it can't read.
+- Identical bwrap to `on`, but **no `--unshare-net` and no whitelist** — the full host
+  network is reachable, `allowedHosts` is ignored.
+- Use this when a task needs arbitrary hosts (and the FS sandbox is still valuable);
+  the whitelist posture returns the moment you switch back to `on`.
+
+### `isolated` — no network at all
+
+- Identical bwrap to `on`, but with plain `--unshare-net` and no proxy bridges — the
+  sandbox has no interfaces and no egress. Network-fetch commands simply fail.
+- This is the old `on` behavior, kept as the strict no-network tier.
 
 ### `readonly` — the agent may only read
 
@@ -68,7 +84,7 @@ is auto-allowed."
 
 ## Selecting a tier
 
-`/guard <off|on|net|readonly>` sets the tier. `/guard` with no argument toggles
+`/guard <off|on|net|isolated|readonly>` sets the tier. `/guard` with no argument toggles
 between `off` and `on` (the common switch). The footer shows the current tier.
 
 The startup tier comes from `guard.jsonc` (validated by `extensions/guard/guard.schema.json`, referenced via the file's `$schema`):
@@ -80,6 +96,8 @@ The startup tier comes from `guard.jsonc` (validated by `extensions/guard/guard.
   "warnPolicy": "prompt",
   "allowedReadDirs": ["/nix", "~/.rustup", "~/.cargo"],
   "writableDirs": ["~/.cargo", "~/.rustup", "~/.cache", "~/.local/share", "~/.config", "~/.npm"],
+  "allowedHosts": ["github.com", "*.github.com", "registry.npmjs.org", "crates.io", "cache.nixos.org"],
+  "deniedHosts": [],
   "overrides": {
     "allowHeads": [],
     "denyHeads": [],
@@ -89,8 +107,8 @@ The startup tier comes from `guard.jsonc` (validated by `extensions/guard/guard.
 }
 ```
 
-- `defaultTier`: `off` | `on` | `net` | `readonly` — the tier at startup (runtime
-  changes via `/guard` are session-scoped and do not persist).
+- `defaultTier`: `off` | `on` | `net` | `isolated` | `readonly` — the tier at startup
+  (runtime changes via `/guard` are process-scoped and do not persist).
 - `mode`: `balanced` | `strict` | `auto` — CARE's decision thresholds (how aggressively
   a command lands in WARN vs DENY vs ALLOW).
 - `warnPolicy`: `prompt` (human judge, default) | `deny` (treat WARN like DENY). This is
@@ -99,6 +117,9 @@ The startup tier comes from `guard.jsonc` (validated by `extensions/guard/guard.
   tool, in addition to the project dir.
 - `writableDirs`: directories bound writable inside the bwrap sandbox (`~` supported);
   everything else stays read-only. The project dir is always writable in `on`/`net`.
+- `allowedHosts` / `deniedHosts`: the `on` tier's network whitelist/blacklist (patterns
+  as above). Empty `allowedHosts` → every host prompts; `deniedHosts` is checked first
+  and never prompts.
 - `overrides`: per-head / per-path escape hatches. Prefer head+subcommand specificity —
   bare heads are coarse (GTFOBins abuses `git`). `allow*` entries are the *only* way to
   override a DENY.

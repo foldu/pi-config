@@ -19,12 +19,22 @@ import { join } from "node:path";
 import { quote } from "shell-quote";
 import { parse as parseJsonc, type ParseError } from "jsonc-parser";
 import { isToolCallEventType, createLocalBashOperations } from "@earendil-works/pi-coding-agent";
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionUIContext } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { analyze } from "./lib/care/engine.ts";
 import { resolve as resolveCare } from "./lib/care/resolution.ts";
 import { formatBashCommand } from "./lib/bash-format.ts";
+import { NetworkPolicy } from "./lib/netpolicy.ts";
+import { startProxies } from "./lib/netproxy.ts";
+import type { ProxyPair } from "./lib/netproxy.ts";
+import {
+  startBridge,
+  stopBridge,
+  buildNetEnvVars,
+  buildSandboxNetCommand,
+} from "./lib/netbridge.ts";
+import type { NetBridge } from "./lib/netbridge.ts";
 import type { AnalysisResult, Decision, RiskClass } from "./lib/care/types.ts";
 import { canonical, isReadAllowed } from "./lib/paths.ts";
 
@@ -32,7 +42,7 @@ import { canonical, isReadAllowed } from "./lib/paths.ts";
 // Config
 // ---------------------------------------------------------------------------
 
-type Tier = "off" | "on" | "net" | "readonly";
+type Tier = "off" | "on" | "net" | "isolated" | "readonly";
 
 interface CareConfig {
   defaultTier: Tier;
@@ -40,6 +50,8 @@ interface CareConfig {
   warnPolicy: "prompt" | "deny";
   allowedReadDirs: string[];
   writableDirs: string[];
+  allowedHosts: string[];
+  deniedHosts: string[];
   overrides: {
     allowHeads: string[];
     denyHeads: string[];
@@ -54,6 +66,8 @@ const DEFAULT_CONFIG: CareConfig = {
   warnPolicy: "prompt",
   allowedReadDirs: ["/nix", "~/.rustup", "~/.cargo"],
   writableDirs: ["~/.cargo", "~/.rustup", "~/.cache", "~/.local/share", "~/.config", "~/.npm"],
+  allowedHosts: [],
+  deniedHosts: [],
   overrides: { allowHeads: [], denyHeads: [], allowPaths: [], denyPaths: [] },
 };
 
@@ -80,6 +94,80 @@ const config = loadConfig();
 let tier: Tier = config.defaultTier;
 
 // ---------------------------------------------------------------------------
+// net whitelist (srt-style proxy egress for the `net` tier)
+// ---------------------------------------------------------------------------
+
+let netProxy: ProxyPair | null = null;
+let netBridge: NetBridge | null = null;
+let netPolicy: NetworkPolicy | null = null;
+let sessionUi: ExtensionUIContext | null = null;
+// Sessions in this process using the guard; the net bridge/proxies are shared
+// across them and torn down only when the last session closes.
+let sessionCount = 0;
+
+// The human's per-host verdicts, remembered for the session (so a command
+// retrying a host doesn't re-prompt every request).
+const hostDecisions = new Map<string, boolean>();
+const inflightAsks = new Map<string, Promise<boolean>>();
+let askQueue: Promise<unknown> = Promise.resolve();
+
+async function doAskHost(host: string): Promise<boolean> {
+  if (!sessionUi) return false; // fail closed (headless / before session_start)
+  const choice = await sessionUi.select(
+    `Network request from the sandbox\n\nHost: ${host}\n\nNot in allowedHosts — allow this host?`,
+    ["Allow", "Deny"],
+  );
+  return choice === "Allow";
+}
+
+/** Prompt once per host, serialized + deduped; remember the verdict. */
+function askHost(host: string): Promise<boolean> {
+  const remembered = hostDecisions.get(host);
+  if (remembered !== undefined) return Promise.resolve(remembered);
+  const inFlight = inflightAsks.get(host);
+  if (inFlight) return inFlight;
+  const p = askQueue
+    .then(() => doAskHost(host))
+    .then(
+      (allow) => {
+        hostDecisions.set(host, allow);
+        return allow;
+      },
+      () => false,
+    )
+    .finally(() => inflightAsks.delete(host));
+  inflightAsks.set(host, p);
+  return p;
+}
+
+function getNetPolicy(): NetworkPolicy | null {
+  if (config.allowedHosts.length === 0) return null;
+  if (!netPolicy) {
+    netPolicy = new NetworkPolicy(config.allowedHosts, config.deniedHosts, askHost);
+  }
+  return netPolicy;
+}
+
+/** Lazily start the host proxies + socat bridges; null when not configured. */
+async function ensureNetBridge(): Promise<NetBridge | null> {
+  if (netBridge) return netBridge;
+  const policy = getNetPolicy();
+  if (!policy) return null;
+  if (!netProxy) netProxy = await startProxies(policy);
+  netBridge = await startBridge({ httpPort: netProxy.httpPort, socksPort: netProxy.socksPort });
+  return netBridge;
+}
+
+function stopNet(): void {
+  stopBridge(netBridge);
+  netBridge = null;
+  netProxy?.close();
+  netProxy = null;
+  netPolicy = null;
+  hostDecisions.clear();
+}
+
+// ---------------------------------------------------------------------------
 // bwrap sandbox
 // ---------------------------------------------------------------------------
 
@@ -89,7 +177,7 @@ function expandHome(p: string): string {
   return p; // `~user/...` left as-is
 }
 
-function wrapInBwrap(command: string, cwd: string, t: Tier): string {
+async function wrapInBwrap(command: string, cwd: string, t: Tier): Promise<string> {
   const args: string[] = ["bwrap", "--ro-bind", "/", "/"]; // read-only root
   if (t !== "readonly") {
     args.push("--bind", cwd, cwd); // project dir writable
@@ -108,7 +196,34 @@ function wrapInBwrap(command: string, cwd: string, t: Tier): string {
     // the FS (read-only root, cap-drop, no net unless `net` tier).
     "--bind", "/tmp", "/tmp",
     "--bind", "/var/tmp", "/var/tmp",
-    ...(t === "net" ? [] : ["--unshare-net"]), // network only in the `net` tier
+  );
+
+  // `on` (the default): whitelisted network — zero interfaces, every
+  // connection forced through the whitelist proxies; hosts not in the list
+  // prompt the human. `isolated` / `readonly`: no network at all. `net`:
+  // unrestricted host network (deliberate escape hatch, whitelist not
+  // enforced).
+  const whitelistMode = t === "on";
+  const unshareNet = t !== "net"; // on, isolated, readonly
+
+  if (whitelistMode) {
+    const bridge = await ensureNetBridge();
+    if (bridge) {
+      // --bind (read-write): connect() on a Unix socket needs write access
+      // to the socket inode, so a read-only bind would block all traffic.
+      args.push("--bind", bridge.httpSocketPath, bridge.httpSocketPath);
+      args.push("--bind", bridge.socksSocketPath, bridge.socksSocketPath);
+      for (const [key, value] of buildNetEnvVars()) {
+        args.push("--setenv", key, value);
+      }
+      command = buildSandboxNetCommand(command, bridge);
+    }
+    // bridge === null (socat/proxy failed): still unshare-net below, so the
+    // sandbox has NO egress at all — fail closed, never bypass the whitelist.
+  }
+
+  if (unshareNet) args.push("--unshare-net");
+  args.push(
     "--unshare-pid",
     "--unshare-ipc",
     "--unshare-uts",
@@ -124,11 +239,13 @@ function sandboxStatus(): string | undefined {
     case "off":
       return undefined;
     case "net":
-      return "🛡 guard ON · net";
+      return "🛡 guard ON · full net";
+    case "isolated":
+      return "🛡 guard ON · no net";
     case "readonly":
       return "🛡 guard ON · read-only";
     default:
-      return "🛡 guard ON · no net";
+      return "🛡 guard ON · whitelist net";
   }
 }
 
@@ -382,10 +499,10 @@ function appendStatus(text: string, status: string): string {
 
 export default function (pi: ExtensionAPI) {
   pi.registerCommand("guard", {
-    description: "Set the safety tier: /guard off|on|net|readonly (no arg toggles off/on)",
+    description: "Set the safety tier: /guard off|on|net|isolated|readonly (no arg toggles off/on)",
     handler: async (args, ctx) => {
       const arg = args?.trim().toLowerCase();
-      const tiers: Tier[] = ["off", "on", "net", "readonly"];
+      const tiers: Tier[] = ["off", "on", "net", "isolated", "readonly"];
       let next: Tier | null = null;
       if (arg && tiers.includes(arg as Tier)) {
         next = arg as Tier;
@@ -394,10 +511,11 @@ export default function (pi: ExtensionAPI) {
       }
       if (next) {
         tier = next;
+        if (tier === "off") stopNet(); // free the proxies/bridges
         ctx.ui.setStatus("guard", sandboxStatus());
         ctx.ui.notify(`Safety tier: ${tier}`, tier === "off" ? "warning" : "info");
       } else {
-        ctx.ui.notify(`Unknown tier "${args}" — usage: /guard off|on|net|readonly`, "warning");
+        ctx.ui.notify(`Unknown tier "${args}" — usage: /guard off|on|net|isolated|readonly`, "warning");
       }
     },
   });
@@ -418,7 +536,7 @@ export default function (pi: ExtensionAPI) {
       // in the tool row stays the readable original.
       let command = params.command;
       if (tier !== "off" && !command.trim().startsWith("bwrap")) {
-        command = wrapInBwrap(command, ctx.cwd, tier);
+        command = await wrapInBwrap(command, ctx.cwd, tier);
       }
       const ops = createLocalBashOperations();
       let output = "";
@@ -469,7 +587,16 @@ export default function (pi: ExtensionAPI) {
   });
 
   pi.on("session_start", (_event, ctx) => {
+    sessionCount++;
+    sessionUi = ctx.ui;
     ctx.ui.setStatus("guard", sandboxStatus());
+  });
+
+  pi.on("session_shutdown", () => {
+    // Sessions share the net bridge/proxies; only tear them down when the
+    // last session in this process closes (other sessions may still use them).
+    sessionCount = Math.max(0, sessionCount - 1);
+    if (sessionCount === 0) stopNet();
   });
 
   pi.on("tool_call", async (event, ctx) => {

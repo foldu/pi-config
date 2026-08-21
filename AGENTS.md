@@ -44,7 +44,10 @@ The `extensions/guard/` extension is self-contained (its own `package.json` +
 cd extensions/guard && npm test
 ```
 
-This runs the `node:test` suite (`node --test`). Run both this and the repo typecheck
+This runs the `node:test` suite (`node --test`). It includes `test/config.test.ts`,
+which validates `guard.jsonc` against `guard.schema.json` with ajv and checks that
+`allowedHosts`/`deniedHosts` patterns are well-formed — schema/config drift fails the
+suite, so no separate ajv-cli step is needed. Run both this and the repo typecheck
 before finishing guard work.
 
 ### Config schema
