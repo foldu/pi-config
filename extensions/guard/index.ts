@@ -101,8 +101,13 @@ function wrapInBwrap(command: string, cwd: string, t: Tier): string {
   args.push(
     "--dev", "/dev",
     "--proc", "/proc",
-    "--tmpfs", "/tmp",
-    "--tmpfs", "/var/tmp",
+    // Bind the real /tmp + /var/tmp read-write instead of a fresh tmpfs per
+    // command: tools stage state there (mktemp, test fixtures, editor locks,
+    // pi's own temp files) and expect it to survive across calls. /tmp is
+    // world-writable on Linux anyway; the sandbox still protects the rest of
+    // the FS (read-only root, cap-drop, no net unless `net` tier).
+    "--bind", "/tmp", "/tmp",
+    "--bind", "/var/tmp", "/var/tmp",
     ...(t === "net" ? [] : ["--unshare-net"]), // network only in the `net` tier
     "--unshare-pid",
     "--unshare-ipc",
@@ -213,8 +218,10 @@ function explainBlock(
   let escalation: string;
   if (f.skipReason === "p_spath") {
     escalation = "promoted to a hard block because it touches a protected or secret path";
-  } else if (f.skipReason === "p_sem") {
-    escalation = `promoted to a hard block because "${cls ? cls.replace(/_/g, " ").toLowerCase() : "high-risk"}" is always blocked regardless of score`;
+  } else if (f.skipReason?.startsWith("p_sem")) {
+    // skipReason is "p_sem:<CLASS>" — use the class it names, not semanticMaxClass
+    const skipped = f.skipReason.slice("p_sem:".length).replace(/_/g, " ").toLowerCase();
+    escalation = `promoted to a hard block because "${skipped}" is always blocked regardless of score`;
   } else if (f.skipReason?.startsWith("p_rule")) {
     escalation = `promoted to a hard block because it matches high-confidence MITRE-backed rule ${f.skipReason.slice("p_rule:".length)}`;
   } else if (f.decision === "DENY" && r.score >= 0.35) {

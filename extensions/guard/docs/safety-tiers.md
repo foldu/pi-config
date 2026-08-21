@@ -37,8 +37,9 @@ is auto-allowed."
 
 ### `on` — the default, contained + CARE-graded
 
-- bwrap with read-only root, the project dir + `WRITABLE_DIRS` bound writable, tmpfs
-  `/tmp` and `/var/tmp`, no network, pid/ipc/uts namespaces, `--cap-drop ALL`.
+- bwrap with read-only root, the project dir + `WRITABLE_DIRS` bound writable, the real
+  `/tmp` and `/var/tmp` bound writable (persistent across commands, not a fresh tmpfs),
+  no network, pid/ipc/uts namespaces, `--cap-drop ALL`.
 - CARE grading: **ALLOW → auto-allow**, **WARN → prompt** (the human judge),
   **DENY → block**.
 - The read-only narrow auto-allow also applies: commands that only read data (read-context
@@ -57,7 +58,8 @@ is auto-allowed."
 ### `readonly` — the agent may only read
 
 - bwrap with **everything read-only** (the project dir is *not* bound writable; only the
-  tmpfs `/tmp` and `/var/tmp` are writable), no network, same namespaces and caps.
+  real `/tmp` and `/var/tmp` are bound writable so staged files persist), no network,
+  same namespaces and caps.
 - **Write-context commands are blocked** (`{ block: true, reason: "read-only mode" }`)
   before execution — fail fast rather than let them die on the read-only bind.
 - **Reads are still CARE-graded**, not blindly allowed: `cat /etc/passwd` still WARNs
