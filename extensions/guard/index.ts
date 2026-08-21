@@ -20,11 +20,12 @@ import { quote } from "shell-quote";
 import { parse as parseJsonc, type ParseError } from "jsonc-parser";
 import { isToolCallEventType, createLocalBashOperations } from "@earendil-works/pi-coding-agent";
 import type { ExtensionAPI, ExtensionUIContext } from "@earendil-works/pi-coding-agent";
-import { Text } from "@earendil-works/pi-tui";
+import { Text, type AutocompleteProvider, type AutocompleteSuggestions } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { analyze } from "./lib/care/engine.ts";
 import { resolve as resolveCare } from "./lib/care/resolution.ts";
 import { formatBashCommand } from "./lib/bash-format.ts";
+import { guardTierCompletions } from "./lib/guard-completions.ts";
 import { NetworkPolicy } from "./lib/egress/policy.ts";
 import { startProxies } from "./lib/egress/proxy.ts";
 import type { ProxyPair } from "./lib/egress/proxy.ts";
@@ -247,6 +248,37 @@ function sandboxStatus(): string | undefined {
     default:
       return "🛡 guard ON · whitelist net";
   }
+}
+
+/**
+ * Autocomplete for `/guard <tier>`: stack on the built-in provider, which
+ * still handles `/command` completion itself. Delegate everything that isn't
+ * a `/guard` line to the built-in (command names, file paths, …).
+ */
+function createGuardAutocompleteProvider(
+  current: AutocompleteProvider,
+): AutocompleteProvider {
+  return {
+    async getSuggestions(
+      lines,
+      cursorLine,
+      cursorCol,
+      options,
+    ): Promise<AutocompleteSuggestions | null> {
+      const beforeCursor = (lines[cursorLine] ?? "").slice(0, cursorCol);
+      const completion = guardTierCompletions(beforeCursor);
+      if (!completion) {
+        return current.getSuggestions(lines, cursorLine, cursorCol, options);
+      }
+      return { prefix: completion.prefix, items: completion.items };
+    },
+    applyCompletion(lines, cursorLine, cursorCol, item, prefix) {
+      return current.applyCompletion(lines, cursorLine, cursorCol, item, prefix);
+    },
+    shouldTriggerFileCompletion(lines, cursorLine, cursorCol) {
+      return current.shouldTriggerFileCompletion?.(lines, cursorLine, cursorCol) ?? true;
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -590,6 +622,7 @@ export default function (pi: ExtensionAPI) {
     sessionCount++;
     sessionUi = ctx.ui;
     ctx.ui.setStatus("guard", sandboxStatus());
+    ctx.ui.addAutocompleteProvider((current) => createGuardAutocompleteProvider(current));
   });
 
   pi.on("session_shutdown", () => {
