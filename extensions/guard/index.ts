@@ -27,6 +27,8 @@ import { analyze } from "./lib/care/engine.ts";
 import { resolve as resolveCare } from "./lib/care/resolution.ts";
 import { formatBashCommand } from "./lib/bash-format.ts";
 import { guardTierCompletions } from "./lib/guard-completions.ts";
+import { checkRuntimeDeps, installHint } from "./lib/environment.ts";
+import type { RuntimeDeps } from "./lib/environment.ts";
 import { NetworkPolicy } from "./lib/egress/policy.ts";
 import { startProxies } from "./lib/egress/proxy.ts";
 import type { ProxyPair } from "./lib/egress/proxy.ts";
@@ -96,12 +98,46 @@ const config = loadConfig();
 let tier: Tier = config.defaultTier;
 
 // ---------------------------------------------------------------------------
-// net whitelist (srt-style proxy egress for the `net` tier)
+// net whitelist (srt-style proxy egress for the `on` tier)
 // ---------------------------------------------------------------------------
 
 let netProxy: ProxyPair | null = null;
 let netBridge: NetBridge | null = null;
 let netPolicy: NetworkPolicy | null = null;
+// Binary closure (bwrap/bash/socat), checked lazily once per process — see
+// lib/environment.ts. Missing binaries fail closed, never bypass the sandbox.
+let runtimeDeps: RuntimeDeps | null = null;
+async function ensureRuntimeDeps(): Promise<RuntimeDeps> {
+  runtimeDeps ??= await checkRuntimeDeps();
+  return runtimeDeps;
+}
+
+/**
+ * Mandatory closure check. Throwing here would just make pi disable the
+ * guard (leaving the session unprotected), so a missing binary exits the
+ * process with a clear message instead — pi must not run without its
+ * enforcement tooling.
+ */
+async function assertRuntimeDeps(): Promise<void> {
+  runtimeDeps = await checkRuntimeDeps();
+  const missing: Array<[string, string]> = [];
+  if (runtimeDeps.bwrap === null) missing.push(["bwrap", installHint("bwrap")]);
+  if (runtimeDeps.socat === null) missing.push(["socat", installHint("socat")]);
+  if (missing.length === 0) return;
+  console.error(
+    [
+      "",
+      "guard: mandatory runtime binaries are missing — refusing to start pi.",
+      "The guard cannot provide containment or network enforcement without them.",
+      "",
+      ...missing.map(([name, hint]) => `  ${name} → ${hint}`),
+      "",
+      "Install them and restart pi (or remove the guard extension if you don't want it).",
+      "",
+    ].join("\n"),
+  );
+  process.exit(1);
+}
 let sessionUi: ExtensionUIContext | null = null;
 // Sessions in this process using the guard; the net bridge/proxies are shared
 // across them and torn down only when the last session closes.
@@ -155,8 +191,18 @@ async function ensureNetBridge(): Promise<NetBridge | null> {
   if (netBridge) return netBridge;
   const policy = getNetPolicy();
   if (!policy) return null;
+  const deps = await ensureRuntimeDeps();
+  if (deps.socat === null) return null; // fail closed: no egress, never bypass
   if (!netProxy) netProxy = await startProxies(policy);
-  netBridge = await startBridge({ httpPort: netProxy.httpPort, socksPort: netProxy.socksPort });
+  try {
+    netBridge = await startBridge({ httpPort: netProxy.httpPort, socksPort: netProxy.socksPort });
+  } catch {
+    // socat present but the bridge failed (permissions, missing socket tools,
+    // …) — fail closed: the sandbox stays unshared, so no egress.
+    netProxy?.close();
+    netProxy = null;
+    return null;
+  }
   return netBridge;
 }
 
@@ -179,6 +225,14 @@ function expandHome(p: string): string {
   return p; // `~user/...` left as-is
 }
 
+/**
+ * The current user's per-user runtime dir, e.g. `/run/user/1000`
+ * (XDG_RUNTIME_DIR's standard location). Undefined when unknown (non-POSIX).
+ */
+function userRuntimeDir(): string | undefined {
+  return typeof process.getuid === "function" ? `/run/user/${process.getuid()}` : undefined;
+}
+
 async function pathExists(p: string): Promise<boolean> {
   try {
     await accessPath(p);
@@ -189,6 +243,17 @@ async function pathExists(p: string): Promise<boolean> {
 }
 
 async function wrapInBwrap(command: string, cwd: string, t: Tier): Promise<string> {
+  const deps = await ensureRuntimeDeps();
+  if (deps.bwrap === null) {
+    throw new Error(
+      `guard: bwrap not found on PATH — cannot sandbox tier "${t}". Install with: ${installHint("bwrap")}`,
+    );
+  }
+  if (deps.bash === null) {
+    throw new Error(
+      `guard: bash not found on PATH — cannot run commands inside the sandbox. Install with: ${installHint("bash")}`,
+    );
+  }
   const args: string[] = ["bwrap", "--ro-bind", "/", "/"]; // read-only root
   if (t !== "readonly") {
     args.push("--bind", cwd, cwd); // project dir writable
@@ -196,6 +261,15 @@ async function wrapInBwrap(command: string, cwd: string, t: Tier): Promise<strin
       const abs = expandHome(dir);
       if (await pathExists(abs)) args.push("--bind", abs, abs);
     }
+    // The user's runtime dir (/run/user/<uid>, XDG_RUNTIME_DIR) gets a
+    // *private tmpfs*, not a host bind: tools that want a writable runtime
+    // dir (podman's exit files, mktemp --tmpdir, …) get a fresh one, but the
+    // host's agent/daemon sockets are deliberately NOT exposed — a rw bind
+    // would hand the sandbox identity material (ssh-agent, gpg-agent, dbus)
+    // and a container-daemon escape primitive (podman's rootless socket).
+    // The uid is dynamic, so this can't live in guard.jsonc.
+    const runtimeDir = userRuntimeDir();
+    if (runtimeDir) args.push("--tmpfs", runtimeDir);
   }
   args.push(
     "--dev", "/dev",
@@ -539,7 +613,8 @@ function appendStatus(text: string, status: string): string {
   return `${text ? `${text}\n\n` : ""}${status}`;
 }
 
-export default function (pi: ExtensionAPI) {
+export default async function (pi: ExtensionAPI) {
+  await assertRuntimeDeps(); // mandatory: exits pi when bwrap/socat are missing
   pi.registerCommand("guard", {
     description: "Set the safety tier: /guard off|on|net|isolated|readonly (no arg toggles off/on)",
     handler: async (args, ctx) => {
