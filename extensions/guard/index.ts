@@ -17,6 +17,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { quote } from "shell-quote";
+import { parse as parseJsonc, type ParseError } from "jsonc-parser";
 import { isToolCallEventType } from "@earendil-works/pi-coding-agent";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { analyze } from "./lib/care/engine.ts";
@@ -55,9 +56,14 @@ const DEFAULT_CONFIG: CareConfig = {
 };
 
 function loadConfig(): CareConfig {
-  const path = join(homedir(), ".pi", "agent", "guard.json");
+  const path = join(homedir(), ".pi", "agent", "guard.jsonc");
   try {
-    const raw = JSON.parse(readFileSync(path, "utf8"));
+    const text = readFileSync(path, "utf8");
+    const errors: ParseError[] = [];
+    const raw = parseJsonc(text, errors, { allowTrailingComma: true });
+    if (errors.length > 0 || typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+      return DEFAULT_CONFIG;
+    }
     return {
       ...DEFAULT_CONFIG,
       ...raw,

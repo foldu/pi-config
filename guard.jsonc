@@ -3,7 +3,9 @@
   "defaultTier": "on",
   "mode": "balanced",
   "warnPolicy": "prompt",
+  // dirs that are auto allowed to be read without prompting
   "allowedReadDirs": ["/nix", "~/.rustup", "~/.cargo"],
+  // dirs that will be mounted rw instead of only ro
   "writableDirs": ["~/.cargo", "~/.rustup", "~/.cache", "~/.local/share", "~/.config", "~/.npm"],
   "overrides": {
     "allowHeads": [],

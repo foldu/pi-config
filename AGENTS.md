@@ -49,9 +49,9 @@ before finishing guard work.
 
 ### Config schema
 
-`guard.json` (repo root) is validated by `extensions/guard/guard.schema.json`, wired up
+`guard.jsonc` (repo root) is validated by `extensions/guard/guard.schema.json`, wired up
 via the file's `$schema`. **If you touch the config in the extension — the `CareConfig`
 interface, `DEFAULT_CONFIG`, or how `index.ts` reads a field — update the schema to
-match** (properties, enum values, defaults, descriptions). Keep `guard.json` and the
+match** (properties, enum values, defaults, descriptions). Keep `guard.jsonc` and the
 docs (`docs/safety-tiers.md`, `docs/care-integration.md`) in sync with any default
 changes.
