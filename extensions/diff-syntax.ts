@@ -104,7 +104,9 @@ export default function (pi: ExtensionAPI) {
   // ------------------------------------------------------------------
   pi.on("tool_call", async (event, ctx) => {
     if (isToolCallEventType("write", event)) {
-      const rawPath = String(event.input.file_path ?? event.input.path ?? "");
+      // file_path is from an older pi schema; keep as a runtime fallback
+      const input = event.input as { path: string; content: string; file_path?: string };
+      const rawPath = String(input.file_path ?? input.path ?? "");
       try {
         writeOldContent.set(event.toolCallId, readFileSync(resolve(ctx.cwd, rawPath), "utf8"));
       } catch {
