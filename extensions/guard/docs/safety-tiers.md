@@ -11,7 +11,7 @@ under one knob.
 **DENY is a hard block in every tier.** The "computer explodes" tier (`rm -rf /`,
 `cat ~/.ssh/id_rsa`, reverse shells, `dd of=/dev/sd*`, …) never reaches a prompt, in
 any tier — including `off`. The only way to lift a DENY is a deliberate, persistent
-`overrides` entry in `guard.json` (audited, not a one-click "allow anyway").
+`overrides` entry in `guard.jsonc` (audited, not a one-click "allow anyway").
 
 CARE always runs. `off` does not mean "guard off" — it means "no containment, so nothing
 is auto-allowed."
@@ -69,7 +69,7 @@ is auto-allowed."
 `/guard <off|on|net|readonly>` sets the tier. `/guard` with no argument toggles
 between `off` and `on` (the common switch). The footer shows the current tier.
 
-The startup tier comes from `guard.json` (validated by `extensions/guard/guard.schema.json`, referenced via the file's `$schema`):
+The startup tier comes from `guard.jsonc` (validated by `extensions/guard/guard.schema.json`, referenced via the file's `$schema`):
 
 ```json
 {

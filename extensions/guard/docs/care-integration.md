@@ -82,7 +82,7 @@ resolve it without a `tsconfig.json` `paths` entry. Tests run with `npm test`
 - **Rewrite path (optional):** `BashSpawnHook` in `createBashToolDefinition` options
   can mutate `{ command, cwd, env }` pre-exec (paper is verify-only; keep as future
   work for canonicalization-based rewriting).
-- **Config:** a `guard.json` config file in the pi dir (`~/.pi/agent/guard.json`); see
+- **Config:** a `guard.jsonc` config file in the pi dir (`~/.pi/agent/guard.jsonc`); see
   the config section below.
 
 ## Decision flow
@@ -93,7 +93,7 @@ Order matters — DENY wins over everything, and auto-allow depends on the activ
 1. CARE computes ALLOW / WARN / DENY over the canonicalized command.
 2. **DENY** → hard block (`{ block: true, reason }`). The "computer explodes" tier: no
    prompt, no human override, in *every* tier. The only way to lift a DENY is a
-   deliberate, persistent `overrides` entry in `guard.json` (audited, not one-click).
+   deliberate, persistent `overrides` entry in `guard.jsonc` (audited, not one-click).
 3. **WARN** → escalate to the user (permission dialog with the evidence summary).
 4. **ALLOW** → auto-allow (no prompt) in the `on` tier; prompt in `off`; in `net`,
    network-fetch commands never auto-allow.
@@ -103,9 +103,9 @@ Order matters — DENY wins over everything, and auto-allow depends on the activ
    `readonly`, the whole tier is "reads only".
 6. The auto-allow policy applies *only* when CARE did not DENY.
 
-## Config file (`guard.json`)
+## Config file (`guard.jsonc`)
 
-Lives in the pi dir (`~/.pi/agent/guard.json`), validated against
+Lives in the pi dir (`~/.pi/agent/guard.jsonc`), validated against
 `extensions/guard/guard.schema.json` (editor autocomplete/validation via `$schema`).
 Sketch (see [`safety-tiers.md`](safety-tiers.md) for the full tier model):
 
@@ -198,7 +198,7 @@ repo `tsc` typecheck. Phase 3 (sanity check) is optional.
   evidence summary (the human judge); ALLOW → auto-allow per tier. `/guard
   off|on|net|readonly` selects the tier; non-bash tools keep the old ask-permission
   behavior.
-- Config: `~/.pi/agent/guard.json` — `defaultTier`, `mode`, `warnPolicy`, per-head/path
+- Config: `~/.pi/agent/guard.jsonc` — `defaultTier`, `mode`, `warnPolicy`, per-head/path
   `overrides` (see [`safety-tiers.md`](safety-tiers.md)).
 - Manual soak: run the user's normal sessions (git commits, nix builds, cargo) and tune
   thresholds + overrides until false positives ≈ 0 on their workload.
@@ -247,7 +247,7 @@ A skeptical pass over the plan. Grouped by resolution status.
 - **DENY was miscategorized as an escalation tier.** DENY in the paper is a hard,
   high-confidence "computer explodes" tier, not something to second-guess. It is now a
   hard block (no prompt, no one-click override); only a deliberate `overrides` entry in
-  `guard.json` can lift it. The human remains the judge for the genuinely ambiguous WARN
+  `guard.jsonc` can lift it. The human remains the judge for the genuinely ambiguous WARN
   band.
 
 ### Accepted residual risk (stated, not hidden)
@@ -291,7 +291,7 @@ A skeptical pass over the plan. Grouped by resolution status.
 - A small smoke set can't estimate the false-positive rate. That's fine: the Phase 2
   soak on real `sessions/` is where it gets tuned; Phase 3 is only a decision-parity
   smoke test.
-- `settings.json` vs `guard.json` — two config files could drift. Acceptable for a
+- `settings.json` vs `guard.jsonc` — two config files could drift. Acceptable for a
   personal config; just don't duplicate a key across both.
 
 ## Risks & mitigations
@@ -319,14 +319,14 @@ A skeptical pass over the plan. Grouped by resolution status.
 
 1. **WARN band** → prompt the human (the user is the judge). No LLM judge.
 2. **DENY band** → hard block (the "computer explodes" tier). Non-overridable in the
-   dialog; only a deliberate `overrides` entry in `guard.json` lifts it.
+   dialog; only a deliberate `overrides` entry in `guard.jsonc` lifts it.
 3. **Auto-allow policy** is driven by the **safety tier** (see
    [`safety-tiers.md`](safety-tiers.md)), not flat config flags:
    - `off` → nothing auto-allows (everything prompts except DENY);
    - `on` → CARE ALLOW band + read-only narrow rule auto-allow;
    - `net` → same, but network-fetch commands never auto-allow;
    - `readonly` → reads CARE-graded, writes blocked.
-4. **Config** lives in a JSON file in the pi dir: `~/.pi/agent/guard.json`.
+4. **Config** lives in a JSON file in the pi dir: `~/.pi/agent/guard.jsonc`.
 5. **Phase 3** is a lightweight sanity check, not an exhaustive eval — this is not
    production code.
 6. **No paper numbers** — this implementation differs from the reference and carries no

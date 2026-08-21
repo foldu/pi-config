@@ -6,7 +6,7 @@
  *
  *   1. CARE grades the command (ALLOW / WARN / DENY); DENY hard-blocks.
  *   2. The active safety tier decides auto-allow vs prompt vs block
- *      (see docs/safety-tiers.md).
+ *      (see ./docs/safety-tiers.md).
  *   3. Approved commands are wrapped in the bwrap sandbox (unless tier is `off`).
  *
  * Non-bash tools keep the old ask-permission behavior: reads inside the project

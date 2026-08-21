@@ -8,7 +8,7 @@ There are three layers, trying to reduce possible fallout:
 
 - a **judge** ([CARE](#1-judge--care)) that grades each command,
 - a **sandbox** ([bwrap](#2-sandbox--bwrap)) that contains execution,
-- **prompting** ([monke in the loop](#3-prompting--monke-in-the-loop)).
+- **prompting** ([monke in the loop](#3-prompting-monke-in-the-loop)).
 
 ## The three components
 

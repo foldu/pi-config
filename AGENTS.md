@@ -53,5 +53,5 @@ before finishing guard work.
 via the file's `$schema`. **If you touch the config in the extension — the `CareConfig`
 interface, `DEFAULT_CONFIG`, or how `index.ts` reads a field — update the schema to
 match** (properties, enum values, defaults, descriptions). Keep `guard.jsonc` and the
-docs (`docs/safety-tiers.md`, `docs/care-integration.md`) in sync with any default
-changes.
+docs (`extensions/guard/docs/safety-tiers.md`, `extensions/guard/docs/care-integration.md`)
+in sync with any default changes.
