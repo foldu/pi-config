@@ -69,13 +69,15 @@ is auto-allowed."
 `/guard <off|on|net|readonly>` sets the tier. `/guard` with no argument toggles
 between `off` and `on` (the common switch). The footer shows the current tier.
 
-The startup tier comes from `guard.json`:
+The startup tier comes from `guard.json` (validated by `extensions/guard/guard.schema.json`, referenced via the file's `$schema`):
 
 ```json
 {
   "defaultTier": "on",
   "mode": "balanced",
   "warnPolicy": "prompt",
+  "allowedReadDirs": ["/nix", "~/.rustup", "~/.cargo"],
+  "writableDirs": ["~/.cargo", "~/.rustup", "~/.cache", "~/.local/share", "~/.config", "~/.npm"],
   "overrides": {
     "allowHeads": [],
     "denyHeads": [],
@@ -91,6 +93,10 @@ The startup tier comes from `guard.json`:
   a command lands in WARN vs DENY vs ALLOW).
 - `warnPolicy`: `prompt` (human judge, default) | `deny` (treat WARN like DENY). This is
   orthogonal to the tier — it raises the floor for the whole guard.
+- `allowedReadDirs`: directories (supports `~`) whose files auto-allow for the `read`
+  tool, in addition to the project dir.
+- `writableDirs`: directories bound writable inside the bwrap sandbox (`~` supported);
+  everything else stays read-only. The project dir is always writable in `on`/`net`.
 - `overrides`: per-head / per-path escape hatches. Prefer head+subcommand specificity —
   bare heads are coarse (GTFOBins abuses `git`). `allow*` entries are the *only* way to
   override a DENY.

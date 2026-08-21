@@ -105,14 +105,17 @@ Order matters — DENY wins over everything, and auto-allow depends on the activ
 
 ## Config file (`guard.json`)
 
-Lives in the pi dir (`~/.pi/agent/guard.json`). Sketch (see
-[`safety-tiers.md`](safety-tiers.md) for the full tier model):
+Lives in the pi dir (`~/.pi/agent/guard.json`), validated against
+`extensions/guard/guard.schema.json` (editor autocomplete/validation via `$schema`).
+Sketch (see [`safety-tiers.md`](safety-tiers.md) for the full tier model):
 
 ```json
 {
   "defaultTier": "on",
   "mode": "balanced",
   "warnPolicy": "prompt",
+  "allowedReadDirs": ["/nix", "~/.rustup", "~/.cargo"],
+  "writableDirs": ["~/.cargo", "~/.rustup", "~/.cache", "~/.local/share", "~/.config", "~/.npm"],
   "overrides": {
     "allowHeads": [],
     "denyHeads": [],
@@ -126,6 +129,10 @@ Lives in the pi dir (`~/.pi/agent/guard.json`). Sketch (see
 - `mode`: `strict` | `balanced` | `auto` (decision thresholds, retuned in the soak).
 - `warnPolicy`: `prompt` (human judge, default) | `deny` (treat WARN like DENY). Never
   an LLM.
+- `allowedReadDirs`: directories whose files auto-allow for `read` (in addition to the
+  project dir).
+- `writableDirs`: directories bound writable in the bwrap sandbox; everything else
+  read-only (project dir always writable in `on`/`net`).
 - `overrides`: per-head / per-path escape hatches for real workflows (nix, git, docker).
   Prefer head+subcommand specificity — bare heads are coarse (GTFOBins abuses `git`).
   `allow*` entries are the *only* way to override a DENY.

@@ -35,15 +35,23 @@ Notes:
   `diff-syntax.ts` read `event.input.file_path`, which the write tool schema dropped
   in favor of `path` — the typecheck caught the dead branch.
 
-## CARE extension tests
+## Guard extension
 
 The `extensions/guard/` extension is self-contained (its own `package.json` +
-`node_modules`, like `extensions/guard/`). After editing anything under
-`extensions/guard/`, run its tests:
+`node_modules`). After editing anything under `extensions/guard/`, run its tests:
 
 ```sh
 cd extensions/guard && npm test
 ```
 
 This runs the `node:test` suite (`node --test`). Run both this and the repo typecheck
-before finishing CARE work.
+before finishing guard work.
+
+### Config schema
+
+`guard.json` (repo root) is validated by `extensions/guard/guard.schema.json`, wired up
+via the file's `$schema`. **If you touch the config in the extension — the `CareConfig`
+interface, `DEFAULT_CONFIG`, or how `index.ts` reads a field — update the schema to
+match** (properties, enum values, defaults, descriptions). Keep `guard.json` and the
+docs (`docs/safety-tiers.md`, `docs/care-integration.md`) in sync with any default
+changes.

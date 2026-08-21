@@ -1,7 +1,10 @@
 {
+  "$schema": "./extensions/guard/guard.schema.json",
   "defaultTier": "on",
   "mode": "balanced",
   "warnPolicy": "prompt",
+  "allowedReadDirs": ["/nix", "~/.rustup", "~/.cargo"],
+  "writableDirs": ["~/.cargo", "~/.rustup", "~/.cache", "~/.local/share", "~/.config", "~/.npm"],
   "overrides": {
     "allowHeads": [],
     "denyHeads": [],

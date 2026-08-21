@@ -10,7 +10,7 @@
  *   3. Approved commands are wrapped in the bwrap sandbox (unless tier is `off`).
  *
  * Non-bash tools keep the old ask-permission behavior: reads inside the project
- * (or ALLOWED_READ_DIRS) auto-allow, everything else prompts.
+ * (or the configured `allowedReadDirs`) auto-allow, everything else prompts.
  */
 
 import { existsSync, readFileSync } from "node:fs";
@@ -35,6 +35,8 @@ interface CareConfig {
   defaultTier: Tier;
   mode: "balanced" | "strict" | "auto";
   warnPolicy: "prompt" | "deny";
+  allowedReadDirs: string[];
+  writableDirs: string[];
   overrides: {
     allowHeads: string[];
     denyHeads: string[];
@@ -47,6 +49,8 @@ const DEFAULT_CONFIG: CareConfig = {
   defaultTier: "on",
   mode: "balanced",
   warnPolicy: "prompt",
+  allowedReadDirs: ["/nix", "~/.rustup", "~/.cargo"],
+  writableDirs: ["~/.cargo", "~/.rustup", "~/.cache", "~/.local/share", "~/.config", "~/.npm"],
   overrides: { allowHeads: [], denyHeads: [], allowPaths: [], denyPaths: [] },
 };
 
@@ -71,15 +75,6 @@ let tier: Tier = config.defaultTier;
 // bwrap sandbox
 // ---------------------------------------------------------------------------
 
-const WRITABLE_DIRS = [
-  "~/.cargo",
-  "~/.rustup",
-  "~/.cache",
-  "~/.local/share",
-  "~/.config",
-  "~/.npm",
-];
-
 function expandHome(p: string): string {
   if (p === "~") return homedir();
   if (p.startsWith("~/")) return join(homedir(), p.slice(2));
@@ -90,7 +85,7 @@ function wrapInBwrap(command: string, cwd: string, t: Tier): string {
   const args: string[] = ["bwrap", "--ro-bind", "/", "/"]; // read-only root
   if (t !== "readonly") {
     args.push("--bind", cwd, cwd); // project dir writable
-    for (const dir of WRITABLE_DIRS) {
+    for (const dir of config.writableDirs) {
       const abs = expandHome(dir);
       if (existsSync(abs)) args.push("--bind", abs, abs);
     }
@@ -128,8 +123,6 @@ function sandboxStatus(): string | undefined {
 // read auto-allow (former ask-permission behavior)
 // ---------------------------------------------------------------------------
 
-const ALLOWED_READ_DIRS = ["/nix", "~/.rustup", "~/.cargo"];
-
 function isInside(parent: string, child: string): boolean {
   const rel = relative(parent, child);
   return rel === "" || (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
@@ -148,7 +141,7 @@ let allowedReadRoots: string[] | undefined;
 async function getAllowedReadRoots(): Promise<string[]> {
   if (!allowedReadRoots) {
     allowedReadRoots = await Promise.all(
-      ALLOWED_READ_DIRS.map((dir) => canonical(expandHome(dir), ".")),
+      config.allowedReadDirs.map((dir) => canonical(expandHome(dir), ".")),
     );
   }
   return allowedReadRoots;
