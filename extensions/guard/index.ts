@@ -14,9 +14,8 @@
  */
 
 import { existsSync, readFileSync } from "node:fs";
-import { realpath } from "node:fs/promises";
 import { homedir } from "node:os";
-import { resolve, relative, isAbsolute, sep, join } from "node:path";
+import { join } from "node:path";
 import { quote } from "shell-quote";
 import { isToolCallEventType } from "@earendil-works/pi-coding-agent";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -24,6 +23,7 @@ import { analyze } from "./lib/care/engine.ts";
 import { resolve as resolveCare } from "./lib/care/resolution.ts";
 import { formatBashCommand } from "../../lib/bash-format.ts";
 import type { AnalysisResult, Decision } from "./lib/care/types.ts";
+import { canonical, isReadAllowed } from "./lib/paths.ts";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -123,20 +123,6 @@ function sandboxStatus(): string | undefined {
 // read auto-allow (former ask-permission behavior)
 // ---------------------------------------------------------------------------
 
-function isInside(parent: string, child: string): boolean {
-  const rel = relative(parent, child);
-  return rel === "" || (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
-}
-
-async function canonical(base: string, p: string): Promise<string> {
-  const abs = resolve(base, p);
-  try {
-    return await realpath(abs);
-  } catch {
-    return abs; // doesn't exist (yet) — fall back to the lexical path
-  }
-}
-
 let allowedReadRoots: string[] | undefined;
 async function getAllowedReadRoots(): Promise<string[]> {
   if (!allowedReadRoots) {
@@ -145,14 +131,6 @@ async function getAllowedReadRoots(): Promise<string[]> {
     );
   }
   return allowedReadRoots;
-}
-
-async function isReadAllowed(projectRoot: string, target: string): Promise<boolean> {
-  if (isInside(await canonical(projectRoot, "."), target)) return true;
-  for (const root of await getAllowedReadRoots()) {
-    if (isInside(root, target)) return true;
-  }
-  return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -262,7 +240,7 @@ async function handleNonBash(event: any, ctx: any) {
   // Auto-allow reads of files inside the project or allowed read dirs.
   if (isToolCallEventType("read", event)) {
     const target = await canonical(ctx.cwd, event.input.path);
-    if (await isReadAllowed(ctx.cwd, target)) return undefined;
+    if (await isReadAllowed(ctx.cwd, target, await getAllowedReadRoots())) return undefined;
   }
   if (!ctx.hasUI) {
     return { block: true, reason: `Blocked: no UI to confirm tool "${event.toolName}"` };
