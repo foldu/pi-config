@@ -20,10 +20,10 @@ import { resolve, relative, isAbsolute, sep, join } from "node:path";
 import { quote } from "shell-quote";
 import { isToolCallEventType } from "@earendil-works/pi-coding-agent";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { analyze } from "./lib/engine.ts";
-import { resolve as resolveCare } from "./lib/resolution.ts";
+import { analyze } from "./lib/care/engine.ts";
+import { resolve as resolveCare } from "./lib/care/resolution.ts";
 import { formatBashCommand } from "../../lib/bash-format.ts";
-import type { AnalysisResult, Decision } from "./lib/types.ts";
+import type { AnalysisResult, Decision } from "./lib/care/types.ts";
 
 // ---------------------------------------------------------------------------
 // Config

@@ -143,7 +143,7 @@ containment and auto-allow, which is what the tier is for.
 
 ## Port map (paper/CARE repo → this repo)
 
-Module paths in the table below live under `extensions/guard/lib/` (this port is a
+Module paths in the table below live under `extensions/guard/` (this port is a
 self-contained extension directory, not the repo-level `lib/`).
 
 | CARE module                 | Port to                                                       | Notes                                                                                                                                                   |
@@ -152,9 +152,9 @@ self-contained extension directory, not the repo-level `lib/`).
 | `structure.py` (L1)         | `lib/care/structure.ts`                                       | `unbash` AST → structural indicators (exec handoff, obfuscation nesting, incomplete parse); fail-closed                                                    |
 | `semantic.py` (L2)          | `lib/care/semantic.ts` + `lexicon.ts`                         | ~250-head lexicon, 9 risk classes, dual-use sub-classifiers (chmod, dd, docker, find -exec, sed -i, tar --to-command, awk/perl/ruby)                    |
 | `path.py` (L3)              | `lib/care/path.ts`                                            | operand extraction, ~/ expand, bounded symlink resolution, read/write context asymmetry, 4 sensitivity tiers; reuse the guard's `canonical()` |
-| `pattern.py` (L4)           | `lib/care/pattern.ts` + `lib/care/rules/rule_provenance.json` | 139-rule bank ports 1:1 (92 MITRE, 31 GTFOBins, 16 manual)                                                                                              |
+| `pattern.py` (L4)           | `lib/care/pattern.ts`                                         | 139-rule bank ports 1:1 (92 MITRE, 31 GTFOBins, 16 manual)                                                                                              |
 | `policy.py`/`modes.py` (L5) | `lib/care/policy.ts`                                          | weighted sum of semantic/path/pattern/structure signals; mode thresholds (retuned in the soak)                                                          |
-| `resolution.py` (Stage 3)   | `lib/resolution.ts` + `index.ts`                                    | skip predicates p_rule/p_sem/p_spath promote high-confidence WARN → DENY (hard block); remaining WARN → user prompt                                    |
+| `resolution.py` (Stage 3)   | `lib/care/resolution.ts` + `index.ts`                                    | skip predicates p_rule/p_sem/p_spath promote high-confidence WARN → DENY (hard block); remaining WARN → user prompt                                    |
 | `engine.py`                 | `lib/care/engine.ts`                                          | `analyze(cmd) → { decision, score, layers, firedRules, trace }`                                                                                         |
 
 **Deliberate deviation — no LLM judge:** the paper's Stage 3 (Resolution) sends the

@@ -1,9 +1,9 @@
 // CARE engine tests — run with `npm test` from extensions/care/.
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { analyze, isDangerous } from "../lib/engine.ts";
-import { resolve } from "../lib/resolution.ts";
-import { normalize } from "../lib/canonicalize.ts";
+import { analyze, isDangerous } from "../lib/care/engine.ts";
+import { resolve } from "../lib/care/resolution.ts";
+import { normalize } from "../lib/care/canonicalize.ts";
 
 describe("canonicalization (Stage 1)", () => {
   it("expands IFS substitutions", () => {
