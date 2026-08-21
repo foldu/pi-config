@@ -1,0 +1,11 @@
+{
+  "defaultTier": "on",
+  "mode": "balanced",
+  "warnPolicy": "prompt",
+  "overrides": {
+    "allowHeads": [],
+    "denyHeads": [],
+    "allowPaths": [],
+    "denyPaths": []
+  }
+}

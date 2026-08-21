@@ -37,12 +37,12 @@ Notes:
 
 ## CARE extension tests
 
-The `extensions/care/` extension is self-contained (its own `package.json` +
-`node_modules`, like `extensions/sandbox/`). After editing anything under
-`extensions/care/`, run its tests:
+The `extensions/guard/` extension is self-contained (its own `package.json` +
+`node_modules`, like `extensions/guard/`). After editing anything under
+`extensions/guard/`, run its tests:
 
 ```sh
-cd extensions/care && npm test
+cd extensions/guard && npm test
 ```
 
 This runs the `node:test` suite (`node --test`). Run both this and the repo typecheck

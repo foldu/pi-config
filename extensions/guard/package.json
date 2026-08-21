@@ -1,0 +1,14 @@
+{
+  "name": "pi-guard",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Guard for pi: CARE pre-execution verification + safety tiers + sandbox + permission prompts",
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "shell-quote": "^1.8.2",
+    "unbash": "^4.0.10"
+  }
+}

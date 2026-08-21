@@ -1,9 +1,0 @@
-{
-  "name": "pi-sandbox",
-  "version": "0.1.0",
-  "private": true,
-  "description": "Bubblewrap sandbox for pi's bash tool (/sandbox toggle)",
-  "dependencies": {
-    "shell-quote": "^1.10.0"
-  }
-}
