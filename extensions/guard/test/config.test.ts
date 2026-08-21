@@ -5,7 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { parse } from "jsonc-parser";
 import Ajv from "ajv";
-import { splitDomainPatternPort } from "../lib/netpolicy.ts";
+import { splitDomainPatternPort } from "../lib/egress/policy.ts";
 
 // Repo root: extensions/guard/test → ../../.. (config and schema live at the
 // repo root, two levels above this test's parent dir).
@@ -41,7 +41,7 @@ test("allowedHosts/deniedHosts entries are well-formed patterns", () => {
   for (const host of [...config.allowedHosts, ...config.deniedHosts]) {
     const { hostPattern } = splitDomainPatternPort(host);
     assert.ok(hostPattern.length > 0, `empty hostname in pattern "${host}"`);
-    // Wildcards are refused for IP literals (see lib/netpolicy.ts).
+    // Wildcards are refused for IP literals (see lib/egress/policy.ts).
     assert.ok(
       !/^\*\.[0-9.]+$/.test(hostPattern),
       `wildcard on IP literal in pattern "${host}"`,

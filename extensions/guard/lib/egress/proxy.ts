@@ -20,7 +20,7 @@ import { createServer as createNetServer, connect as tcpConnect } from "node:net
 import type { Socket } from "node:net";
 import type { Duplex } from "node:stream";
 import { request as httpRequest } from "node:http";
-import type { NetworkPolicy } from "./netpolicy.ts";
+import type { NetworkPolicy } from "./policy.ts";
 
 export interface ProxyPair {
   httpPort: number;

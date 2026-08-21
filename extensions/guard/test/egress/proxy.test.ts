@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { createServer as createHttpServer } from "node:http";
 import { createServer as createNetServer, connect } from "node:net";
 import type { AddressInfo } from "node:net";
-import { NetworkPolicy } from "../lib/netpolicy.ts";
-import { startProxies } from "../lib/netproxy.ts";
+import { NetworkPolicy } from "../../lib/egress/policy.ts";
+import { startProxies } from "../../lib/egress/proxy.ts";
 
 /** Tiny SOCKS5 CONNECT client used to exercise the SOCKS proxy. */
 function socks5Connect(

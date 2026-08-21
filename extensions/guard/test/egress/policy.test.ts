@@ -5,7 +5,7 @@ import {
   matchesDomainPatternWithPort,
   splitDomainPatternPort,
   NetworkPolicy,
-} from "../lib/netpolicy.ts";
+} from "../../lib/egress/policy.ts";
 
 test("splitDomainPatternPort", () => {
   assert.deepEqual(splitDomainPatternPort("example.com"), { hostPattern: "example.com", port: undefined });

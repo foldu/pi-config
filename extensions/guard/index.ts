@@ -25,16 +25,16 @@ import { Type } from "typebox";
 import { analyze } from "./lib/care/engine.ts";
 import { resolve as resolveCare } from "./lib/care/resolution.ts";
 import { formatBashCommand } from "./lib/bash-format.ts";
-import { NetworkPolicy } from "./lib/netpolicy.ts";
-import { startProxies } from "./lib/netproxy.ts";
-import type { ProxyPair } from "./lib/netproxy.ts";
+import { NetworkPolicy } from "./lib/egress/policy.ts";
+import { startProxies } from "./lib/egress/proxy.ts";
+import type { ProxyPair } from "./lib/egress/proxy.ts";
 import {
   startBridge,
   stopBridge,
   buildNetEnvVars,
   buildSandboxNetCommand,
-} from "./lib/netbridge.ts";
-import type { NetBridge } from "./lib/netbridge.ts";
+} from "./lib/egress/bridge.ts";
+import type { NetBridge } from "./lib/egress/bridge.ts";
 import type { AnalysisResult, Decision, RiskClass } from "./lib/care/types.ts";
 import { canonical, isReadAllowed } from "./lib/paths.ts";
 
