@@ -27,11 +27,17 @@ export const GUARD_TIER_ITEMS: AutocompleteItem[] = [
     label: "readonly",
     description: "read-only FS — writes blocked before running",
   },
+  {
+    value: "allow-ssh",
+    label: "allow-ssh",
+    description: "forward the host ssh-agent into the sandbox (on/off)",
+  },
 ];
 
-// `/guard` optionally followed by whitespace + a partial argument, anchored at
-// line start (like real slash commands). `/guardx` or `foo /guard on` don't match.
-const GUARD_ARG_RE = /^\/guard(?:[ \t]+([a-z]*))?$/i;
+// `/guard` optionally followed by whitespace + a partial argument (letters or
+// hyphens, for allow-ssh), anchored at line start (like real slash commands).
+// `/guardx` or `foo /guard on` don't match.
+const GUARD_ARG_RE = /^\/guard(?:[ \t]+([a-z-]*))?$/i;
 
 /**
  * Returns tier completions for the text before the cursor, or null when the

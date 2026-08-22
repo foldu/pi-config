@@ -122,3 +122,26 @@ test("buildSandboxEnv skips unset vars and dedupes against the base", () => {
   assert.equal(out.filter(([k]) => k === "PWD").length, 1);
   assert.ok(!out.some(([k]) => k === "TERM")); // unset in env → skipped
 });
+
+test("buildSandboxEnv sets SSH_AUTH_SOCK only when sshAuthSock is provided", () => {
+  const env = {
+    HOME: "/home/barnabas",
+    SSH_AUTH_SOCK: "/run/user/1000/ssh-agent.sock",
+  };
+  // Not forwarded → the host agent socket path must NOT leak into the sandbox.
+  const without = buildSandboxEnv(env, [], undefined, undefined);
+  assert.ok(!without.some(([k]) => k === "SSH_AUTH_SOCK"));
+  // Forwarded → SSH_AUTH_SOCK points at the sandbox-side path, never the host one.
+  const withSock = buildSandboxEnv(
+    env,
+    [],
+    undefined,
+    "/home/barnabas/.cache/guard/ssh-agent.sock",
+  );
+  assert.deepEqual(
+    withSock.find(([k]) => k === "SSH_AUTH_SOCK")?.[1],
+    "/home/barnabas/.cache/guard/ssh-agent.sock",
+  );
+  // The host-side socket path must never be the value.
+  assert.ok(!withSock.some(([, v]) => v === "/run/user/1000/ssh-agent.sock"));
+});

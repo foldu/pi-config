@@ -2,13 +2,13 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { guardTierCompletions, GUARD_TIER_ITEMS } from "../lib/guard-completions.ts";
 
-test("bare `/guard` offers all five tiers with an empty prefix", () => {
+test("bare `/guard` offers all subcommands with an empty prefix", () => {
   const r = guardTierCompletions("/guard");
   assert.ok(r);
   assert.equal(r.prefix, "");
   assert.deepEqual(
     r.items.map((i) => i.value),
-    ["off", "on", "net", "isolated", "readonly"],
+    ["off", "on", "net", "isolated", "readonly", "allow-ssh"],
   );
 });
 
@@ -42,6 +42,18 @@ test("case-insensitive argument matching", () => {
     guardTierCompletions("/guard OFF")!.items.map((i) => i.value),
     ["off"],
   );
+});
+
+test("allow-ssh completes through the hyphen", () => {
+  assert.deepEqual(
+    guardTierCompletions("/guard allow")!.items.map((i) => i.value),
+    ["allow-ssh"],
+  );
+  assert.deepEqual(
+    guardTierCompletions("/guard allow-s")!.items.map((i) => i.value),
+    ["allow-ssh"],
+  );
+  assert.equal(guardTierCompletions("/guard allow-ssh off"), null);
 });
 
 test("non-guard lines return null (delegate to built-in)", () => {

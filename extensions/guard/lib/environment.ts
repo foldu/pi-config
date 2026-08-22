@@ -79,12 +79,15 @@ const SANDBOX_ENV_BASE = [
  * `runtimeDir` (e.g. `/run/user/1000`) is re-exposed as XDG_RUNTIME_DIR so it
  * matches the private tmpfs the guard mounts there. `allowedEnv` is the
  * config escape hatch: entries are copied verbatim from the host env, so
- * secrets like CARGO_REGISTRY_TOKEN can be opted in explicitly.
+ * secrets like CARGO_REGISTRY_TOKEN can be opted in explicitly. `sshAuthSock`
+ * is the sandbox-side agent socket path (enabled via `/guard allow-ssh`);
+ * when absent, SSH_AUTH_SOCK is stripped like every other secret.
  */
 export function buildSandboxEnv(
   env: NodeJS.ProcessEnv,
   allowedEnv: string[],
   runtimeDir?: string,
+  sshAuthSock?: string,
 ): Array<[string, string]> {
   const out: Array<[string, string]> = [];
   const seen = new Set<string>();
@@ -97,6 +100,10 @@ export function buildSandboxEnv(
   if (runtimeDir) {
     out.push(["XDG_RUNTIME_DIR", runtimeDir]);
     seen.add("XDG_RUNTIME_DIR");
+  }
+  if (sshAuthSock) {
+    out.push(["SSH_AUTH_SOCK", sshAuthSock]);
+    seen.add("SSH_AUTH_SOCK");
   }
   for (const key of allowedEnv) {
     if (seen.has(key)) continue;

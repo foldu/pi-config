@@ -14,7 +14,7 @@
  */
 
 import { readFileSync } from "node:fs";
-import { access as accessPath } from "node:fs/promises";
+import { access as accessPath, mkdir, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { quote } from "shell-quote";
@@ -103,6 +103,10 @@ function loadConfig(): CareConfig {
 
 const config = loadConfig();
 let tier: Tier = config.defaultTier;
+// SSH agent passthrough, toggled live via `/guard allow-ssh` (default off —
+// fail closed). When on, the host agent socket is bound rw into the sandbox
+// and SSH_AUTH_SOCK points at it; private keys never leave the host.
+let sshForward = false;
 
 // ---------------------------------------------------------------------------
 // net whitelist (srt-style proxy egress for the `on` tier)
@@ -262,6 +266,24 @@ async function wrapInBwrap(command: string, cwd: string, t: Tier): Promise<strin
     );
   }
   const args: string[] = ["bwrap", "--ro-bind", "/", "/"]; // read-only root
+  // SSH agent passthrough (`/guard allow-ssh`): bind the host agent socket rw
+  // into the sandbox at a guard-owned path and point SSH_AUTH_SOCK at it.
+  // The bind itself is appended AFTER the FS binds below — mount order
+  // matters: `--bind ~/.cache ~/.cache` (writableDirs) would otherwise
+  // remount over the socket and shadow it. A same-path bind would also be
+  // shadowed by the private tmpfs at /run/user/<uid>, so we use
+  // ~/.cache/guard/ssh-agent.sock with a pre-created placeholder file as the
+  // bind target. Keys never leave the host.
+  let sshAgentBind: [string, string] | null = null; // [hostSock, sandboxTarget]
+  if (sshForward) {
+    const hostSock = process.env.SSH_AUTH_SOCK;
+    if (hostSock) {
+      const target = join(homedir(), ".cache", "guard", "ssh-agent.sock");
+      await mkdir(join(homedir(), ".cache", "guard"), { recursive: true });
+      await writeFile(target, ""); // ensure the bind target exists as a regular file
+      sshAgentBind = [hostSock, target];
+    }
+  }
   // Env sandboxing: bwrap inherits the host environment by default, which
   // would leak API keys/tokens into sandboxed commands. Start from
   // `--clearenv` and re-add a curated whitelist (base vars + the config's
@@ -273,6 +295,7 @@ async function wrapInBwrap(command: string, cwd: string, t: Tier): Promise<strin
     process.env,
     config.allowedEnv ?? [],
     userRuntimeDir(),
+    sshAgentBind?.[1],
   )) {
     args.push("--setenv", key, value);
   }
@@ -292,6 +315,9 @@ async function wrapInBwrap(command: string, cwd: string, t: Tier): Promise<strin
     const runtimeDir = userRuntimeDir();
     if (runtimeDir) args.push("--tmpfs", runtimeDir);
   }
+  // The agent socket bind goes last: mounts apply in order, so anything
+  // mounted over ~/.cache earlier (writableDirs) would shadow it.
+  if (sshAgentBind) args.push("--bind", sshAgentBind[0], sshAgentBind[1]);
   args.push(
     "--dev",
     "/dev",
@@ -349,19 +375,37 @@ async function wrapInBwrap(command: string, cwd: string, t: Tier): Promise<strin
   return quote(args);
 }
 
+// ssh-agent forwarding is only useful when the sandbox has direct network
+// access. In `on` (proxy-only egress) / `isolated` / `readonly` plain ssh has
+// no route out — warn loudly when that combo is active. `off` has no sandbox,
+// so the host agent is naturally reachable (no mismatch).
+function sshForwardMismatch(): boolean {
+  return sshForward && tier !== "net" && tier !== "off";
+}
+
 function sandboxStatus(): string | undefined {
+  const ssh = sshForward ? " · ssh-agent" : "";
+  let text: string | undefined;
   switch (tier) {
     case "off":
       return undefined;
     case "net":
-      return "🛡 guard ON · full net";
+      text = `🛡 guard ON · full net${ssh}`;
+      break;
     case "isolated":
-      return "🛡 guard ON · no net";
+      text = `🛡 guard ON · no net${ssh}`;
+      break;
     case "readonly":
-      return "🛡 guard ON · read-only";
+      text = `🛡 guard ON · read-only${ssh}`;
+      break;
     default:
-      return "🛡 guard ON · whitelist net";
+      text = `🛡 guard ON · whitelist net${ssh}`;
   }
+  // Red when ssh-agent is forwarded but the tier has no direct network: plain
+  // ssh can't reach anything — the combo is almost certainly a mistake.
+  // ANSI survives the footer's sanitizer (it only strips newlines/tabs) and
+  // the TUI renders it (visibleWidth/extractAnsiCode are ANSI-aware).
+  return sshForwardMismatch() ? `\x1b[31m${text}\x1b[0m` : text;
 }
 
 /**
@@ -646,24 +690,56 @@ function appendStatus(text: string, status: string): string {
 export default async function (pi: ExtensionAPI) {
   await assertRuntimeDeps(); // mandatory: exits pi when bwrap/socat are missing
   pi.registerCommand("guard", {
-    description: "Set the safety tier: /guard off|on|net|isolated|readonly (no arg toggles off/on)",
+    description:
+      "Set the safety tier: /guard off|on|net|isolated|readonly (no arg toggles off/on). /guard allow-ssh [on|off] forwards the host ssh-agent into the sandbox.",
     handler: async (args, ctx) => {
-      const arg = args?.trim().toLowerCase();
+      const [cmd, ...rest] = (args ?? "").trim().toLowerCase().split(/\s+/);
+      if (cmd === "allow-ssh") {
+        const sub = rest[0];
+        if (sub !== undefined && sub !== "on" && sub !== "off") {
+          ctx.ui.notify("usage: /guard allow-ssh [on|off]", "warning");
+          return;
+        }
+        const enable = sub === undefined ? !sshForward : sub === "on";
+        if (enable && !process.env.SSH_AUTH_SOCK) {
+          ctx.ui.notify("allow-ssh: no SSH_AUTH_SOCK on the host — nothing to forward", "warning");
+          return;
+        }
+        sshForward = enable;
+        ctx.ui.setStatus("guard", sandboxStatus());
+        ctx.ui.notify(
+          enable ? "ssh-agent forwarded into the sandbox" : "ssh-agent forwarding off",
+          "info",
+        );
+        if (enable && sshForwardMismatch()) {
+          ctx.ui.notify(
+            "allow-ssh: this tier has no direct network (plain ssh cannot reach hosts) — switch to /guard net",
+            "warning",
+          );
+        }
+        return;
+      }
       const tiers: Tier[] = ["off", "on", "net", "isolated", "readonly"];
       let next: Tier | null = null;
-      if (arg && tiers.includes(arg as Tier)) {
-        next = arg as Tier;
-      } else if (!arg) {
+      if (cmd && tiers.includes(cmd as Tier)) {
+        next = cmd as Tier;
+      } else if (!cmd) {
         next = tier === "off" ? "on" : "off";
       }
       if (next) {
         tier = next;
-        if (tier === "off") stopNet(); // free the proxies/bridges
+        if (tier === "off") await stopNet(); // free the proxies/bridges
         ctx.ui.setStatus("guard", sandboxStatus());
         ctx.ui.notify(`Safety tier: ${tier}`, tier === "off" ? "warning" : "info");
+        if (sshForward && sshForwardMismatch()) {
+          ctx.ui.notify(
+            "ssh-agent forwarding is on, but this tier has no direct network (plain ssh cannot reach hosts) — use /guard net",
+            "warning",
+          );
+        }
       } else {
         ctx.ui.notify(
-          `Unknown tier "${args}" — usage: /guard off|on|net|isolated|readonly`,
+          `Unknown "${args}" — usage: /guard off|on|net|isolated|readonly | allow-ssh [on|off]`,
           "warning",
         );
       }
