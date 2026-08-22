@@ -21,7 +21,11 @@ import { quote } from "shell-quote";
 import { parse as parseJsonc, type ParseError } from "jsonc-parser";
 import { isToolCallEventType, createLocalBashOperations } from "@earendil-works/pi-coding-agent";
 import type { ExtensionAPI, ExtensionUIContext } from "@earendil-works/pi-coding-agent";
-import { Text, type AutocompleteProvider, type AutocompleteSuggestions } from "@earendil-works/pi-tui";
+import {
+  Text,
+  type AutocompleteProvider,
+  type AutocompleteSuggestions,
+} from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { analyze } from "./lib/care/engine.ts";
 import { resolve as resolveCare } from "./lib/care/resolution.ts";
@@ -87,7 +91,7 @@ function loadConfig(): CareConfig {
     return {
       ...DEFAULT_CONFIG,
       ...raw,
-      overrides: { ...DEFAULT_CONFIG.overrides, ...(raw.overrides ?? {}) },
+      overrides: { ...DEFAULT_CONFIG.overrides, ...raw.overrides },
     };
   } catch {
     return DEFAULT_CONFIG;
@@ -272,15 +276,21 @@ async function wrapInBwrap(command: string, cwd: string, t: Tier): Promise<strin
     if (runtimeDir) args.push("--tmpfs", runtimeDir);
   }
   args.push(
-    "--dev", "/dev",
-    "--proc", "/proc",
+    "--dev",
+    "/dev",
+    "--proc",
+    "/proc",
     // Bind the real /tmp + /var/tmp read-write instead of a fresh tmpfs per
     // command: tools stage state there (mktemp, test fixtures, editor locks,
     // pi's own temp files) and expect it to survive across calls. /tmp is
     // world-writable on Linux anyway; the sandbox still protects the rest of
     // the FS (read-only root, cap-drop, no net unless `net` tier).
-    "--bind", "/tmp", "/tmp",
-    "--bind", "/var/tmp", "/var/tmp",
+    "--bind",
+    "/tmp",
+    "/tmp",
+    "--bind",
+    "/var/tmp",
+    "/var/tmp",
   );
 
   // `on` (the default): whitelisted network — zero interfaces, every
@@ -312,9 +322,12 @@ async function wrapInBwrap(command: string, cwd: string, t: Tier): Promise<strin
     "--unshare-pid",
     "--unshare-ipc",
     "--unshare-uts",
-    "--cap-drop", "ALL",
+    "--cap-drop",
+    "ALL",
     "--die-with-parent",
-    "bash", "-c", command,
+    "bash",
+    "-c",
+    command,
   );
   return quote(args);
 }
@@ -339,9 +352,7 @@ function sandboxStatus(): string | undefined {
  * still handles `/command` completion itself. Delegate everything that isn't
  * a `/guard` line to the built-in (command names, file paths, …).
  */
-function createGuardAutocompleteProvider(
-  current: AutocompleteProvider,
-): AutocompleteProvider {
+function createGuardAutocompleteProvider(current: AutocompleteProvider): AutocompleteProvider {
   return {
     async getSuggestions(
       lines,
@@ -513,7 +524,10 @@ async function handleBash(event: any, ctx: any) {
   const head = rawHead(cmd);
   if (config.overrides.denyHeads.includes(head) || matchesPath(config.overrides.denyPaths, cmd)) {
     decision = "DENY";
-  } else if (config.overrides.allowHeads.includes(head) || matchesPath(config.overrides.allowPaths, cmd)) {
+  } else if (
+    config.overrides.allowHeads.includes(head) ||
+    matchesPath(config.overrides.allowPaths, cmd)
+  ) {
     decision = "ALLOW";
   }
 
@@ -545,8 +559,7 @@ async function handleBash(event: any, ctx: any) {
 
   // auto-allow: only when contained (tier !== off), for ALLOW or clearly-read WARN
   const autoAllow =
-    tier !== "off" &&
-    (decision === "ALLOW" || (decision === "WARN" && isReadOnlySafe(cmd, r)));
+    tier !== "off" && (decision === "ALLOW" || (decision === "WARN" && isReadOnlySafe(cmd, r)));
 
   if (!autoAllow) {
     const ok = await promptBash(ctx, cmd, r);
@@ -632,7 +645,10 @@ export default async function (pi: ExtensionAPI) {
         ctx.ui.setStatus("guard", sandboxStatus());
         ctx.ui.notify(`Safety tier: ${tier}`, tier === "off" ? "warning" : "info");
       } else {
-        ctx.ui.notify(`Unknown tier "${args}" — usage: /guard off|on|net|isolated|readonly`, "warning");
+        ctx.ui.notify(
+          `Unknown tier "${args}" — usage: /guard off|on|net|isolated|readonly`,
+          "warning",
+        );
       }
     },
   });

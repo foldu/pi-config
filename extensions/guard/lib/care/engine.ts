@@ -43,7 +43,12 @@ export function analyze(cmd: string, options: EngineOptions = {}): AnalysisResul
   let bestCls: RiskClass | null = null;
   for (const atom of ast.atoms) {
     const s = classify(atom);
-    semDetails.push({ atom: atom.slice(0, 120), riskClass: s.riskClass, score: s.score, reason: s.reason });
+    semDetails.push({
+      atom: atom.slice(0, 120),
+      riskClass: s.riskClass,
+      score: s.score,
+      reason: s.reason,
+    });
     if (s.score > semScore) {
       semScore = s.score;
       bestCls = s.riskClass;

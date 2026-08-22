@@ -25,3 +25,15 @@ guard-tests:
   script:
     - npm --prefix extensions/guard ci --ignore-scripts
     - npm --prefix extensions/guard test
+
+lint:
+  needs: []
+  script:
+    - npm --prefix npm ci --ignore-scripts
+    - npm --prefix npm run lint
+
+fmt:
+  needs: []
+  script:
+    - npm --prefix npm ci --ignore-scripts
+    - npm --prefix npm run fmt:check

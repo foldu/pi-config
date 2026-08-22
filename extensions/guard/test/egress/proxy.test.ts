@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createServer as createHttpServer } from "node:http";
-import { createServer as createNetServer, connect } from "node:net";
+import { connect } from "node:net";
 import type { AddressInfo } from "node:net";
 import { NetworkPolicy } from "../../lib/egress/policy.ts";
 import { startProxies } from "../../lib/egress/proxy.ts";
@@ -75,7 +75,9 @@ test("proxies: HTTP CONNECT allow/deny + plain forward + SOCKS5", async () => {
     // --- HTTP CONNECT to an allowed host (127.0.0.1) ---
     const tunnel = await new Promise<{ socket: import("node:net").Socket }>((resolve, reject) => {
       const socket = connect(proxies.httpPort, "127.0.0.1", () => {
-        socket.write(`CONNECT 127.0.0.1:${targetPort} HTTP/1.1\r\nHost: 127.0.0.1:${targetPort}\r\n\r\n`);
+        socket.write(
+          `CONNECT 127.0.0.1:${targetPort} HTTP/1.1\r\nHost: 127.0.0.1:${targetPort}\r\n\r\n`,
+        );
       });
       let buf = "";
       let sent = false;
@@ -117,7 +119,9 @@ test("proxies: HTTP CONNECT allow/deny + plain forward + SOCKS5", async () => {
     // --- Plain HTTP through the proxy ---
     const plain = await new Promise<string>((resolve, reject) => {
       const socket = connect(proxies.httpPort, "127.0.0.1", () => {
-        socket.write(`GET http://127.0.0.1:${targetPort}/ HTTP/1.1\r\nHost: 127.0.0.1:${targetPort}\r\nConnection: close\r\n\r\n`);
+        socket.write(
+          `GET http://127.0.0.1:${targetPort}/ HTTP/1.1\r\nHost: 127.0.0.1:${targetPort}\r\nConnection: close\r\n\r\n`,
+        );
       });
       let buf = "";
       socket.on("data", (c: Buffer) => (buf += c.toString()));

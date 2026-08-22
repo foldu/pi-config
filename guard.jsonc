@@ -24,7 +24,7 @@
     "*.crates.io",
     "cache.nixos.org",
     "channels.nixos.org",
-    "nixos.org"
+    "nixos.org",
   ],
   // always-denied hosts, checked before allowedHosts (no prompt); `*` denies all
   "deniedHosts": [],
@@ -32,6 +32,6 @@
     "allowHeads": [],
     "denyHeads": [],
     "allowPaths": [],
-    "denyPaths": []
-  }
+    "denyPaths": [],
+  },
 }

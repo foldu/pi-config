@@ -107,16 +107,20 @@ export async function startBridge(proxyPorts: {
   ];
   for (const [sock, port] of pairs) {
     procs.push(
-      spawn(
-        "socat",
-        [`UNIX-LISTEN:${sock},fork,reuseaddr`, `TCP:127.0.0.1:${port}`],
-        { stdio: "ignore" },
-      ),
+      spawn("socat", [`UNIX-LISTEN:${sock},fork,reuseaddr`, `TCP:127.0.0.1:${port}`], {
+        stdio: "ignore",
+      }),
     );
   }
   // Record the socat PIDs so a later instance can sweep this dir if pi crashed.
   try {
-    await writeFile(join(dir, "pids"), procs.map((p) => p.pid ?? 0).filter((pid) => pid > 0).join("\n") + "\n");
+    await writeFile(
+      join(dir, "pids"),
+      procs
+        .map((p) => p.pid ?? 0)
+        .filter((pid) => pid > 0)
+        .join("\n") + "\n",
+    );
   } catch {
     /* best effort */
   }

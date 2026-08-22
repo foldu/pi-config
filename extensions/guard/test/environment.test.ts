@@ -9,7 +9,10 @@ async function withTempDirs(
   spec: Array<[string, boolean]>, // [dirName, executable] relative to base
   fn: (base: string, pathEnv: string) => Promise<void>,
 ): Promise<void> {
-  const base = join(tmpdir(), `guard-env-test-${process.pid}-${Math.random().toString(36).slice(2)}`);
+  const base = join(
+    tmpdir(),
+    `guard-env-test-${process.pid}-${Math.random().toString(36).slice(2)}`,
+  );
   await mkdir(base, { recursive: true });
   try {
     for (const [name, executable] of spec) {
@@ -28,7 +31,10 @@ async function withTempDirs(
 
 test("findBinary resolves an executable across colon-separated PATH entries", async () => {
   await withTempDirs(
-    [["a", false], ["b", true]],
+    [
+      ["a", false],
+      ["b", true],
+    ],
     async (base, pathEnv) => {
       const found = await findBinary("fake-bin", pathEnv);
       assert.equal(found, join(base, "b", "fake-bin"));
@@ -38,7 +44,10 @@ test("findBinary resolves an executable across colon-separated PATH entries", as
 
 test("findBinary skips non-executable entries and empty/missing dirs", async () => {
   await withTempDirs(
-    [["a", false], ["b", true]],
+    [
+      ["a", false],
+      ["b", true],
+    ],
     async (base, pathEnv) => {
       // "a" has no fake-bin; "missing" doesn't exist; trailing ":" is empty.
       assert.equal(await findBinary("nonexistent-bin", pathEnv), null);

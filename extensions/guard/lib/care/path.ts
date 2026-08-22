@@ -23,61 +23,177 @@ const CRITICAL_PATH_PATTERNS: RegExp[] = [
 ];
 
 const SECRET_READ_PATHS = [
-  "~/.ssh/id_", "~/.ssh/authorized_keys",
-  "~/.aws/credentials", "~/.docker/config.json",
-  "~/.kube/config", "~/.gnupg/", "~/.netrc",
+  "~/.ssh/id_",
+  "~/.ssh/authorized_keys",
+  "~/.aws/credentials",
+  "~/.docker/config.json",
+  "~/.kube/config",
+  "~/.gnupg/",
+  "~/.netrc",
   "~/.mysql_history",
-  "/etc/shadow", "/etc/gshadow", "/etc/sudoers",
+  "/etc/shadow",
+  "/etc/gshadow",
+  "/etc/sudoers",
   "/root/.ssh",
 ];
 
 const SENSITIVE_WRITE_PATHS = [
-  "/etc/", "/boot/", "/sys/", "/proc/sys/", "/root/",
-  "/var/log/", "/var/lib/",
+  "/etc/",
+  "/boot/",
+  "/sys/",
+  "/proc/sys/",
+  "/root/",
+  "/var/log/",
+  "/var/lib/",
   "/dev/",
 ];
 
 const BENIGN_DEVICE_PATHS = [
-  "/dev/null", "/dev/zero", "/dev/random", "/dev/urandom",
-  "/dev/stdout", "/dev/stderr", "/dev/stdin",
-  "/dev/tty", "/dev/pts/", "/dev/fd/",
+  "/dev/null",
+  "/dev/zero",
+  "/dev/random",
+  "/dev/urandom",
+  "/dev/stdout",
+  "/dev/stderr",
+  "/dev/stdin",
+  "/dev/tty",
+  "/dev/pts/",
+  "/dev/fd/",
 ];
 
 const SYSTEM_ROOT_TARGETS = new Set([
-  "/", "/*", "/home", "/etc", "/usr", "/var",
-  "/opt", "/srv", "/boot", "/bin", "/sbin", "/lib", "/lib64",
+  "/",
+  "/*",
+  "/home",
+  "/etc",
+  "/usr",
+  "/var",
+  "/opt",
+  "/srv",
+  "/boot",
+  "/bin",
+  "/sbin",
+  "/lib",
+  "/lib64",
 ]);
 
 const READ_ONLY_HEADS = new Set([
-  "cat", "head", "tail", "less", "more", "wc", "nl", "od", "xxd",
-  "hexdump", "strings",
-  "grep", "egrep", "fgrep", "rg", "ag", "ack",
-  "find", "locate", "which", "whereis", "type",
-  "ls", "ll", "dir", "tree", "file", "stat", "readlink", "realpath",
-  "du", "df",
-  "awk", "sed",
-  "cut", "sort", "uniq", "tr", "column", "paste", "diff", "cmp",
-  "jq", "yq",
-  "echo", "printf",
-  "ps", "top", "htop", "free", "uptime", "date",
-  "uname", "id", "whoami", "hostname", "env", "printenv",
-  "md5sum", "sha1sum", "sha256sum",
-  "mount", "rsync",
+  "cat",
+  "head",
+  "tail",
+  "less",
+  "more",
+  "wc",
+  "nl",
+  "od",
+  "xxd",
+  "hexdump",
+  "strings",
+  "grep",
+  "egrep",
+  "fgrep",
+  "rg",
+  "ag",
+  "ack",
+  "find",
+  "locate",
+  "which",
+  "whereis",
+  "type",
+  "ls",
+  "ll",
+  "dir",
+  "tree",
+  "file",
+  "stat",
+  "readlink",
+  "realpath",
+  "du",
+  "df",
+  "awk",
+  "sed",
+  "cut",
+  "sort",
+  "uniq",
+  "tr",
+  "column",
+  "paste",
+  "diff",
+  "cmp",
+  "jq",
+  "yq",
+  "echo",
+  "printf",
+  "ps",
+  "top",
+  "htop",
+  "free",
+  "uptime",
+  "date",
+  "uname",
+  "id",
+  "whoami",
+  "hostname",
+  "env",
+  "printenv",
+  "md5sum",
+  "sha1sum",
+  "sha256sum",
+  "mount",
+  "rsync",
 ]);
 
 const WRITE_HEADS = new Set([
-  "cp", "mv", "mkdir", "touch", "ln", "rm", "rmdir",
-  "dd", "mkfs", "shred", "wipefs", "fdisk", "truncate", "fallocate",
-  "chmod", "chown", "chgrp", "setcap",
-  "tar", "zip", "unzip", "gzip", "gunzip",
-  "apt", "apt-get", "yum", "dnf", "pacman", "npm", "pip", "pip3",
-  "make", "gcc", "g++", "cmake",
+  "cp",
+  "mv",
+  "mkdir",
+  "touch",
+  "ln",
+  "rm",
+  "rmdir",
+  "dd",
+  "mkfs",
+  "shred",
+  "wipefs",
+  "fdisk",
+  "truncate",
+  "fallocate",
+  "chmod",
+  "chown",
+  "chgrp",
+  "setcap",
+  "tar",
+  "zip",
+  "unzip",
+  "gzip",
+  "gunzip",
+  "apt",
+  "apt-get",
+  "yum",
+  "dnf",
+  "pacman",
+  "npm",
+  "pip",
+  "pip3",
+  "make",
+  "gcc",
+  "g++",
+  "cmake",
   "git",
 ]);
 
 const DESTRUCTIVE_HEADS = new Set([
-  "rm", "dd", "mkfs", "shred", "wipefs", "fdisk", "parted",
-  "gdisk", "sgdisk", "cfdisk", "truncate",
+  "rm",
+  "dd",
+  "mkfs",
+  "shred",
+  "wipefs",
+  "fdisk",
+  "parted",
+  "gdisk",
+  "sgdisk",
+  "cfdisk",
+  "truncate",
 ]);
 
 function headOf(cmd: string): string {
@@ -118,7 +234,10 @@ function stripQuotes(s: string): string {
 
 function extractPaths(cmd: string): string[] {
   const paths: string[] = [];
+  // Intentional: \x1f (unit separator) guards the inline-encoded payload markers.
+  // oxlint-disable-next-line no-control-regex
   let text = cmd.replace(/\x1f?<(?:B64DEC|HEXDEC|OCTDEC|PY_B64|SHELL_C)>/g, " ");
+  // oxlint-disable-next-line no-control-regex
   text = text.replace(/<\/(?:B64DEC|HEXDEC|OCTDEC|PY_B64|SHELL_C)>\x1f?/g, " ");
 
   const tokenRe = /"[^"]+"|'[^']+'|\S+/g;
@@ -130,7 +249,12 @@ function extractPaths(cmd: string): string[] {
       const eq = t.indexOf("=");
       if (eq !== -1) {
         const rhs = t.slice(eq + 1);
-        if (rhs.startsWith("/") || rhs.startsWith("~") || rhs.startsWith("./") || rhs.includes("../")) {
+        if (
+          rhs.startsWith("/") ||
+          rhs.startsWith("~") ||
+          rhs.startsWith("./") ||
+          rhs.includes("../")
+        ) {
           paths.push(rhs);
         }
       }
@@ -144,7 +268,10 @@ function extractPaths(cmd: string): string[] {
   const redirectRe = />{1,2}\s*([^\s;&|]+)/g;
   while ((m = redirectRe.exec(text)) !== null) {
     const tgt = stripQuotes(m[1]!);
-    if (tgt && (tgt.startsWith("/") || tgt.startsWith("~") || tgt.startsWith("./") || tgt.includes("../"))) {
+    if (
+      tgt &&
+      (tgt.startsWith("/") || tgt.startsWith("~") || tgt.startsWith("./") || tgt.includes("../"))
+    ) {
       paths.push(tgt);
     }
   }
@@ -221,7 +348,11 @@ export function validatePath(cmd: string): PathVerdict {
 
     // (c) secret-bearing read paths — always high
     for (const sp of SECRET_READ_PATHS) {
-      if (expanded.startsWith(sp) || p.startsWith(sp) || sp.replace(/^~+/, "") !== "" && expanded.includes(sp.replace(/^~+/, ""))) {
+      if (
+        expanded.startsWith(sp) ||
+        p.startsWith(sp) ||
+        (sp.replace(/^~+/, "") !== "" && expanded.includes(sp.replace(/^~+/, "")))
+      ) {
         const score = 0.85;
         if (score > maxScore) {
           maxScore = score;

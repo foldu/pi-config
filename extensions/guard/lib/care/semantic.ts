@@ -9,12 +9,20 @@ function basename(p: string): string {
 }
 
 const SECRET_PATHS = [
-  "/etc/shadow", "/etc/gshadow", "/etc/sudoers",
-  "~/.ssh/id_", "~/.ssh/authorized_keys",
-  "~/.aws/credentials", "~/.docker/config.json",
-  "~/.kube/config", "~/.gnupg/", "~/.netrc",
+  "/etc/shadow",
+  "/etc/gshadow",
+  "/etc/sudoers",
+  "~/.ssh/id_",
+  "~/.ssh/authorized_keys",
+  "~/.aws/credentials",
+  "~/.docker/config.json",
+  "~/.kube/config",
+  "~/.gnupg/",
+  "~/.netrc",
   "/root/.ssh",
-  ".bash_history", ".zsh_history", ".mysql_history",
+  ".bash_history",
+  ".zsh_history",
+  ".mysql_history",
 ];
 
 export type ClassifyResult = { riskClass: RiskClass; score: number; reason: string };
@@ -39,11 +47,19 @@ export function classify(atom: string): ClassifyResult {
 
   if (touchesSecretPath(tokens)) {
     if (cls === "WRITE_LOCAL" || cls === "READ_ONLY") {
-      return { riskClass: "WRITE_SENSITIVE", score: CLASS_BASE_SCORE.WRITE_SENSITIVE, reason: `${prog}:secret_path` };
+      return {
+        riskClass: "WRITE_SENSITIVE",
+        score: CLASS_BASE_SCORE.WRITE_SENSITIVE,
+        reason: `${prog}:secret_path`,
+      };
     }
   }
   if ((prog === "rsync" || prog === "scp" || prog === "sftp") && !hasRemoteHost(tokens)) {
-    return { riskClass: "WRITE_LOCAL", score: CLASS_BASE_SCORE.WRITE_LOCAL, reason: `${prog}:local_no_remote_host` };
+    return {
+      riskClass: "WRITE_LOCAL",
+      score: CLASS_BASE_SCORE.WRITE_LOCAL,
+      reason: `${prog}:local_no_remote_host`,
+    };
   }
   return { riskClass: cls, score, reason: `db_lookup:${prog}` };
 }
@@ -51,7 +67,10 @@ export function classify(atom: string): ClassifyResult {
 function classifyGit(tokens: string[]): ClassifyResult {
   const sub = tokens[1] ?? "";
   const cls = GIT_SUBCOMMAND_CLASSES.get(sub) ?? "WRITE_LOCAL";
-  if (sub === "push" && tokens.some((t) => t === "-f" || t === "--force" || t === "--force-with-lease"))
+  if (
+    sub === "push" &&
+    tokens.some((t) => t === "-f" || t === "--force" || t === "--force-with-lease")
+  )
     return { riskClass: "DESTRUCTIVE", score: 0.85, reason: "git_push_force" };
   if (sub === "reset" && tokens.includes("--hard"))
     return { riskClass: "DESTRUCTIVE", score: 0.8, reason: "git_reset_hard" };
@@ -69,7 +88,11 @@ function classifyRm(tokens: string[]): ClassifyResult {
 
   if ((recursive && force) || fstr.includes("-rf") || fstr.includes("-fr")) {
     for (const p of targets) {
-      if (["/", "/*", "~", "~/*", "/home", "/etc", "/usr", "/var", "/boot", "/bin", "/sbin"].includes(p)) {
+      if (
+        ["/", "/*", "~", "~/*", "/home", "/etc", "/usr", "/var", "/boot", "/bin", "/sbin"].includes(
+          p,
+        )
+      ) {
         return { riskClass: "DESTRUCTIVE", score: 1.0, reason: `rm_rf_critical:${p}` };
       }
     }
@@ -86,13 +109,19 @@ function classifyChmod(tokens: string[]): ClassifyResult {
       const modeStr = t.slice(-3);
       const mode = parseInt(modeStr, 8);
       const paths = tokens.slice(2).filter((p) => !p.startsWith("-"));
-      const isSensitive = paths.some((p) =>
-        p.startsWith("/") || p.startsWith("~/") || p.startsWith("/etc") ||
-        p.startsWith("/usr") || p.startsWith("/bin") || p.startsWith("/sbin"),
+      const isSensitive = paths.some(
+        (p) =>
+          p.startsWith("/") ||
+          p.startsWith("~/") ||
+          p.startsWith("/etc") ||
+          p.startsWith("/usr") ||
+          p.startsWith("/bin") ||
+          p.startsWith("/sbin"),
       );
       if (mode === 0o777 && isSensitive)
         return { riskClass: "PRIVILEGE_OR_PERMISSION", score: 0.95, reason: "chmod_777_sensitive" };
-      if (mode === 0o777) return { riskClass: "PRIVILEGE_OR_PERMISSION", score: 0.8, reason: "chmod_777" };
+      if (mode === 0o777)
+        return { riskClass: "PRIVILEGE_OR_PERMISSION", score: 0.8, reason: "chmod_777" };
       if (t.startsWith("4") || t.startsWith("2"))
         return { riskClass: "PRIVILEGE_OR_PERMISSION", score: 0.85, reason: `chmod_suid:${t}` };
     }
@@ -128,7 +157,11 @@ function classifyKill(tokens: string[]): ClassifyResult {
     return { riskClass: "RESOURCE_ABUSE", score: 0.9, reason: "killall_critical" };
   if (/\bpkill\s+-9\s+-u\s+root\b/.test(joined))
     return { riskClass: "RESOURCE_ABUSE", score: 0.9, reason: "pkill_root" };
-  return { riskClass: "RESOURCE_ABUSE", score: CLASS_BASE_SCORE.RESOURCE_ABUSE, reason: "kill_generic" };
+  return {
+    riskClass: "RESOURCE_ABUSE",
+    score: CLASS_BASE_SCORE.RESOURCE_ABUSE,
+    reason: "kill_generic",
+  };
 }
 
 function touchesSecretPath(tokens: string[]): boolean {

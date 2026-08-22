@@ -1,0 +1,4 @@
+# oxfmt ignore (also read as .prettierignore by prettier tools).
+# Docs stay hand-written; settings.json is pi's live config, not ours to reformat.
+settings.json
+**/*.md

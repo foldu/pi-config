@@ -10,7 +10,9 @@ import { walkNode } from "./walk.ts";
 const SHELL_NAMES = new Set(["sh", "bash", "dash", "zsh", "ash", "ksh"]);
 
 function isPrintable(s: string): boolean {
-  // Reject control chars except \n (0x0a) and \t (0x09).
+  // Reject control chars except \n (0x0a) and \t (0x09). Intentional: CARE
+  // must match control characters in shell payloads.
+  // oxlint-disable-next-line no-control-regex
   return !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(s);
 }
 
@@ -50,7 +52,8 @@ export function collapseSubstitution(cmd: string): string {
 
 export function expandVariables(cmd: string): string {
   const assigns: Record<string, string> = {};
-  const assignRe = /(?:^|;|\s|&&|\|\|)\s*([A-Za-z_][A-Za-z0-9_]*)=("([^"]*)"|'([^']*)'|([^\s;|&]+))/g;
+  const assignRe =
+    /(?:^|;|\s|&&|\|\|)\s*([A-Za-z_][A-Za-z0-9_]*)=("([^"]*)"|'([^']*)'|([^\s;|&]+))/g;
   let m: RegExpExecArray | null;
   while ((m = assignRe.exec(cmd)) !== null) {
     const name = m[1]!;
@@ -62,7 +65,10 @@ export function expandVariables(cmd: string): string {
 
   let out = cmd;
   for (let i = 0; i < 2; i++) {
-    out = out.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (_, n: string) => assigns[n] ?? `\${${n}}`);
+    out = out.replace(
+      /\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g,
+      (_, n: string) => assigns[n] ?? `\${${n}}`,
+    );
     out = out.replace(/\$([A-Za-z_][A-Za-z0-9_]*)/g, (_, n: string) => assigns[n] ?? `$${n}`);
   }
   return out;

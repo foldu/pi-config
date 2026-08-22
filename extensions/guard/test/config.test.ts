@@ -42,9 +42,6 @@ test("allowedHosts/deniedHosts entries are well-formed patterns", () => {
     const { hostPattern } = splitDomainPatternPort(host);
     assert.ok(hostPattern.length > 0, `empty hostname in pattern "${host}"`);
     // Wildcards are refused for IP literals (see lib/egress/policy.ts).
-    assert.ok(
-      !/^\*\.[0-9.]+$/.test(hostPattern),
-      `wildcard on IP literal in pattern "${host}"`,
-    );
+    assert.ok(!/^\*\.[0-9.]+$/.test(hostPattern), `wildcard on IP literal in pattern "${host}"`);
   }
 });

@@ -16,8 +16,22 @@ export interface StructResult {
 }
 
 const EXEC_INTERPRETERS = new Set([
-  "bash", "sh", "zsh", "dash", "ksh", "csh", "tcsh",
-  "eval", "python", "python2", "python3", "perl", "ruby", "node", "lua", "php",
+  "bash",
+  "sh",
+  "zsh",
+  "dash",
+  "ksh",
+  "csh",
+  "tcsh",
+  "eval",
+  "python",
+  "python2",
+  "python3",
+  "perl",
+  "ruby",
+  "node",
+  "lua",
+  "php",
 ]);
 
 function headName(node: Node): string {
@@ -44,8 +58,7 @@ function applyFallback(cmd: string, r: StructResult): void {
   r.hasCommandSub = r.hasCommandSub || cmd.includes("$(") || cmd.includes("`");
   r.hasEval = r.hasEval || /\b(eval|source)\b/.test(cmd);
   r.hasPipeToExec =
-    r.hasPipeToExec ||
-    /\|\s*(bash|sh|zsh|dash|eval|python[23]?|perl|ruby|node)\b/.test(cmd);
+    r.hasPipeToExec || /\|\s*(bash|sh|zsh|dash|eval|python[23]?|perl|ruby|node)\b/.test(cmd);
   const dollarSubs = (cmd.match(/\$\(/g) ?? []).length;
   const backticks = Math.floor((cmd.match(/`/g) ?? []).length / 2);
   r.nestedSubDepth = Math.max(r.nestedSubDepth, dollarSubs + backticks);
@@ -112,7 +125,10 @@ export function analyzeStructure(cmd: string): StructResult {
     }
   };
 
-  const visitCommand = (c: { name?: Word; suffix: Word[]; redirects: unknown[] }, depth: number): void => {
+  const visitCommand = (
+    c: { name?: Word; suffix: Word[]; redirects: unknown[] },
+    depth: number,
+  ): void => {
     if (c.name) {
       const atom = [c.name.text, ...c.suffix.map((w) => w.text)].join(" ");
       r.atoms.push(atom);

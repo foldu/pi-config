@@ -4,17 +4,21 @@ Personal pi configuration. TypeScript extensions in `extensions/`, shared module
 `lib/`. Pi loads them at runtime via jiti — **there is no build step**, so typechecking
 is the only static validation these files get.
 
-## Typecheck your output
+## Check your output
 
 After editing any file in `extensions/` or `lib/`, run:
 
 ```sh
 npm --prefix npm run typecheck
+npm --prefix npm run lint
+npm --prefix npm run fmt:check
 ```
 
-(or `cd npm && npm run typecheck`). This runs `tsc --noEmit -p ../tsconfig.json`
-with the repo's pinned compiler. **Always run it before finishing a task that touched
-extension code.** A clean exit is the minimum bar for done.
+(or `cd npm && npm run …`). `typecheck` runs `tsc --noEmit -p ../tsconfig.json`
+with the repo's pinned compiler; `lint`/`fmt:check` run oxlint/oxfmt over the
+repo (format with `npm --prefix npm run fmt`, auto-fix lint with
+`npm --prefix npm run lint:fix`). **Always run them before finishing a task
+that touched extension code.** A clean exit is the minimum bar for done.
 
 Notes:
 

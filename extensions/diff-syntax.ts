@@ -58,7 +58,12 @@ function renderHighlightedDiff(diffText: string, lang: string | undefined, theme
   return out.join("\n");
 }
 
-function highlightedDiffComponent(diffText: string, lang: string | undefined, theme: Theme, context: any): Text {
+function highlightedDiffComponent(
+  diffText: string,
+  lang: string | undefined,
+  theme: Theme,
+  context: any,
+): Text {
   const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
   text.setText(renderHighlightedDiff(diffText, lang, theme));
   return text;
@@ -121,7 +126,9 @@ export default function (pi: ExtensionAPI) {
   pi.registerTool({
     ...writeDef,
     renderResult(result, options, theme, context) {
-      const args = context.args as { path?: string; file_path?: string; content?: string } | undefined;
+      const args = context.args as
+        | { path?: string; file_path?: string; content?: string }
+        | undefined;
       const rawPath = String(args?.file_path ?? args?.path ?? "");
       const lang = getLanguageFromPath(rawPath);
       const old = writeOldContent.get(context.toolCallId);

@@ -65,10 +65,7 @@ export async function startProxies(policy: NetworkPolicy): Promise<ProxyPair> {
 
   const httpAddr = httpServer.address();
   const socksAddr = socksServer.address();
-  if (
-    !httpAddr || typeof httpAddr === "string" ||
-    !socksAddr || typeof socksAddr === "string"
-  ) {
+  if (!httpAddr || typeof httpAddr === "string" || !socksAddr || typeof socksAddr === "string") {
     httpServer.close();
     socksServer.close();
     throw new Error("proxy listen failed");

@@ -30,11 +30,15 @@ export function isShfmtAvailable(): boolean {
 export function formatBashCommand(command: string): string {
   if (!isShfmtAvailable()) return command;
   try {
-    const result = spawnSync("shfmt", ["--language-dialect", "bash", "--simplify", "--binary-next-line"], {
-      input: command,
-      encoding: "utf8",
-      timeout: 5000,
-    });
+    const result = spawnSync(
+      "shfmt",
+      ["--language-dialect", "bash", "--simplify", "--binary-next-line"],
+      {
+        input: command,
+        encoding: "utf8",
+        timeout: 5000,
+      },
+    );
     if (result.status === 0 && typeof result.stdout === "string" && result.stdout.length > 0) {
       return result.stdout.replace(/\n$/, "");
     }

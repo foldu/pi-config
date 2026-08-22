@@ -8,14 +8,26 @@ import {
 } from "../../lib/egress/policy.ts";
 
 test("splitDomainPatternPort", () => {
-  assert.deepEqual(splitDomainPatternPort("example.com"), { hostPattern: "example.com", port: undefined });
-  assert.deepEqual(splitDomainPatternPort("example.com:443"), { hostPattern: "example.com", port: 443 });
+  assert.deepEqual(splitDomainPatternPort("example.com"), {
+    hostPattern: "example.com",
+    port: undefined,
+  });
+  assert.deepEqual(splitDomainPatternPort("example.com:443"), {
+    hostPattern: "example.com",
+    port: 443,
+  });
   assert.deepEqual(splitDomainPatternPort("*:22"), { hostPattern: "*", port: 22 });
   // unbracketed IPv6 never splits
   assert.deepEqual(splitDomainPatternPort("::1"), { hostPattern: "::1", port: undefined });
-  assert.deepEqual(splitDomainPatternPort("[2001:db8::1]:443"), { hostPattern: "2001:db8::1", port: 443 });
+  assert.deepEqual(splitDomainPatternPort("[2001:db8::1]:443"), {
+    hostPattern: "2001:db8::1",
+    port: 443,
+  });
   // non-numeric suffix is not a port
-  assert.deepEqual(splitDomainPatternPort("evil.com:443.allowed.com"), { hostPattern: "evil.com:443.allowed.com", port: undefined });
+  assert.deepEqual(splitDomainPatternPort("evil.com:443.allowed.com"), {
+    hostPattern: "evil.com:443.allowed.com",
+    port: undefined,
+  });
 });
 
 test("matchesDomainPattern", () => {

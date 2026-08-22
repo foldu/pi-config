@@ -60,7 +60,15 @@ describe("engine decisions (Stage 2 + Resolution)", () => {
   for (const cmd of dangerous) {
     it(`denies: ${cmd}`, () => {
       const r = analyze(cmd);
-      assert.equal(r.decision, "DENY", JSON.stringify({ score: r.score, layers: r.triggeredLayers, rules: r.firedRules.map((x) => x.ruleId) }));
+      assert.equal(
+        r.decision,
+        "DENY",
+        JSON.stringify({
+          score: r.score,
+          layers: r.triggeredLayers,
+          rules: r.firedRules.map((x) => x.ruleId),
+        }),
+      );
     });
   }
 
@@ -68,21 +76,33 @@ describe("engine decisions (Stage 2 + Resolution)", () => {
     "cat /etc/os-release",
     "ls -la",
     "git commit -m 'fix'",
-    "grep -rn \"TODO\" src/",
+    'grep -rn "TODO" src/',
     "find . -name '*.py'",
     "du -sh /",
   ];
   for (const cmd of benign) {
     it(`allows: ${cmd}`, () => {
       const r = analyze(cmd);
-      assert.equal(r.decision, "ALLOW", JSON.stringify({ score: r.score, layers: r.triggeredLayers }));
+      assert.equal(
+        r.decision,
+        "ALLOW",
+        JSON.stringify({ score: r.score, layers: r.triggeredLayers }),
+      );
     });
   }
 
   it("denies an IFS-eval obfuscated rm", () => {
     const cmd = '$IFS=|; x=rm; y=-rf; z=/tmp/*; eval "$x$IFS$y$IFS$z"';
     const r = analyze(cmd);
-    assert.equal(r.decision, "DENY", JSON.stringify({ score: r.score, layers: r.triggeredLayers, rules: r.firedRules.map((x) => x.ruleId) }));
+    assert.equal(
+      r.decision,
+      "DENY",
+      JSON.stringify({
+        score: r.score,
+        layers: r.triggeredLayers,
+        rules: r.firedRules.map((x) => x.ruleId),
+      }),
+    );
   });
 
   it("denies a bwrap-wrapped destructive command", () => {

@@ -2,7 +2,11 @@
   "name": "pi-extensions",
   "private": true,
   "scripts": {
-    "typecheck": "tsc --noEmit -p ../tsconfig.json"
+    "typecheck": "tsc --noEmit -p ../tsconfig.json",
+    "lint": "cd .. && oxlint",
+    "lint:fix": "cd .. && oxlint --fix",
+    "fmt": "cd .. && oxfmt",
+    "fmt:check": "cd .. && oxfmt --check"
   },
   "dependencies": {
     "pi-mcp-adapter": "^2.26.1",
@@ -10,9 +14,11 @@
     "pi-web-access": "^0.23.0"
   },
   "devDependencies": {
-    "@types/node": "^24.0.0",
     "@earendil-works/pi-coding-agent": "0.84.1",
     "@earendil-works/pi-tui": "0.84.1",
+    "@types/node": "^24.0.0",
+    "oxfmt": "^0.64.0",
+    "oxlint": "^1.79.0",
     "shell-quote": "^1.8.2",
     "typescript": "^7.0.2"
   }
