@@ -1,5 +1,5 @@
 default:
-  image: node:24
+  image: docker.io/node:24
   timeout: 10 minutes
 
 cache:
@@ -15,7 +15,7 @@ typecheck:
   needs: []
   script:
     # --ignore-scripts: all deps are pure JS (no postinstall needed) — makes
-    # installs deterministic and sidesteps npm 11's retarded allow-scripts approval.
+    # installs deterministic and sidesteps npm 11's insulting allow-scripts approval.
     - npm --prefix npm ci --ignore-scripts
     - npm --prefix extensions/guard ci --ignore-scripts
     - npm --prefix npm run typecheck
