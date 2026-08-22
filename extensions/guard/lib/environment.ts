@@ -56,3 +56,53 @@ export function installHint(binary: keyof RuntimeDeps): string {
   const pkg = binary === "bwrap" ? "bubblewrap" : binary === "socat" ? "socat" : "bashInteractive";
   return `nix profile install nixpkgs#${pkg}`;
 }
+
+// Environment whitelist for the sandbox. bwrap inherits the full host env by
+// default, which would leak API keys/tokens into sandboxed commands — so the
+// sandbox starts from `--clearenv` and gets back only this curated base plus
+// the user's explicit `allowedEnv` config passthrough (secrets are opt-in).
+const SANDBOX_ENV_BASE = [
+  "HOME",
+  "PATH",
+  "TERM",
+  "LANG",
+  "LC_ALL",
+  "TZ",
+  "USER",
+  "LOGNAME",
+  "SHELL",
+  "PWD",
+];
+
+/**
+ * Build the sandbox environment as [key, value] pairs for `--setenv`.
+ * `runtimeDir` (e.g. `/run/user/1000`) is re-exposed as XDG_RUNTIME_DIR so it
+ * matches the private tmpfs the guard mounts there. `allowedEnv` is the
+ * config escape hatch: entries are copied verbatim from the host env, so
+ * secrets like CARGO_REGISTRY_TOKEN can be opted in explicitly.
+ */
+export function buildSandboxEnv(
+  env: NodeJS.ProcessEnv,
+  allowedEnv: string[],
+  runtimeDir?: string,
+): Array<[string, string]> {
+  const out: Array<[string, string]> = [];
+  const seen = new Set<string>();
+  for (const key of SANDBOX_ENV_BASE) {
+    const value = env[key];
+    if (value === undefined || value === null) continue;
+    out.push([key, value]);
+    seen.add(key);
+  }
+  if (runtimeDir) {
+    out.push(["XDG_RUNTIME_DIR", runtimeDir]);
+    seen.add("XDG_RUNTIME_DIR");
+  }
+  for (const key of allowedEnv) {
+    if (seen.has(key)) continue;
+    const value = env[key];
+    if (value === undefined || value === null) continue;
+    out.push([key, value]);
+  }
+  return out;
+}

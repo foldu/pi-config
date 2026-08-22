@@ -28,6 +28,10 @@
   ],
   // always-denied hosts, checked before allowedHosts (no prompt); `*` denies all
   "deniedHosts": [],
+  // env vars passed through to sandboxed commands (everything else is
+  // stripped — the sandbox starts from an empty env). Secrets are opt-in:
+  // e.g. ["CARGO_REGISTRY_TOKEN"] if cargo needs it.
+  "allowedEnv": [],
   "overrides": {
     "allowHeads": [],
     "denyHeads": [],

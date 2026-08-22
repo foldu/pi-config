@@ -51,6 +51,12 @@
       "default": [],
       "description": "Hosts always denied, checked before allowedHosts (no prompt). Same pattern syntax. A bare `*` here denies everything."
     },
+    "allowedEnv": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": [],
+      "description": "Environment variables passed through to sandboxed commands, in addition to the fixed base (HOME, PATH, TERM, LANG, LC_ALL, TZ, USER, LOGNAME, SHELL, PWD, XDG_RUNTIME_DIR). Everything else is stripped from the sandbox env — secrets are opt-in, e.g. CARGO_REGISTRY_TOKEN."
+    },
     "overrides": {
       "type": "object",
       "additionalProperties": false,

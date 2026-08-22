@@ -31,7 +31,7 @@ import { analyze } from "./lib/care/engine.ts";
 import { resolve as resolveCare } from "./lib/care/resolution.ts";
 import { formatBashCommand } from "./lib/bash-format.ts";
 import { guardTierCompletions } from "./lib/guard-completions.ts";
-import { checkRuntimeDeps, installHint } from "./lib/environment.ts";
+import { checkRuntimeDeps, installHint, buildSandboxEnv } from "./lib/environment.ts";
 import type { RuntimeDeps } from "./lib/environment.ts";
 import { NetworkPolicy } from "./lib/egress/policy.ts";
 import { startProxies } from "./lib/egress/proxy.ts";
@@ -60,6 +60,8 @@ interface CareConfig {
   writableDirs: string[];
   allowedHosts: string[];
   deniedHosts: string[];
+  /** Env vars passed through to sandboxed commands (secrets are opt-in). */
+  allowedEnv: string[];
   overrides: {
     allowHeads: string[];
     denyHeads: string[];
@@ -76,6 +78,7 @@ const DEFAULT_CONFIG: CareConfig = {
   writableDirs: ["~/.cargo", "~/.rustup", "~/.cache", "~/.local/share", "~/.config", "~/.npm"],
   allowedHosts: [],
   deniedHosts: [],
+  allowedEnv: [],
   overrides: { allowHeads: [], denyHeads: [], allowPaths: [], denyPaths: [] },
 };
 
@@ -259,6 +262,20 @@ async function wrapInBwrap(command: string, cwd: string, t: Tier): Promise<strin
     );
   }
   const args: string[] = ["bwrap", "--ro-bind", "/", "/"]; // read-only root
+  // Env sandboxing: bwrap inherits the host environment by default, which
+  // would leak API keys/tokens into sandboxed commands. Start from
+  // `--clearenv` and re-add a curated whitelist (base vars + the config's
+  // explicit `allowedEnv` passthrough + XDG_RUNTIME_DIR matching the private
+  // tmpfs mounted at /run/user/<uid>). The whitelist tier adds its proxy env
+  // later, via buildNetEnvVars() below.
+  args.push("--clearenv");
+  for (const [key, value] of buildSandboxEnv(
+    process.env,
+    config.allowedEnv ?? [],
+    userRuntimeDir(),
+  )) {
+    args.push("--setenv", key, value);
+  }
   if (t !== "readonly") {
     args.push("--bind", cwd, cwd); // project dir writable
     for (const dir of config.writableDirs) {
