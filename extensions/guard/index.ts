@@ -44,7 +44,7 @@ import {
   buildSandboxNetCommand,
 } from "./lib/egress/bridge.ts";
 import type { NetBridge } from "./lib/egress/bridge.ts";
-import type { AnalysisResult, Decision, RiskClass } from "./lib/care/types.ts";
+import type { AnalysisResult, Decision } from "./lib/care/types.ts";
 import { canonical, isReadAllowed } from "./lib/paths.ts";
 
 // ---------------------------------------------------------------------------

@@ -4,21 +4,9 @@
   "mode": "balanced",
   "warnPolicy": "prompt",
   // dirs that are auto allowed to be read without prompting
-  "allowedReadDirs": [
-    "/nix",
-    "~/.rustup",
-    "~/.cargo",
-    "/tmp"
-  ],
+  "allowedReadDirs": ["/nix", "~/.rustup", "~/.cargo", "/tmp"],
   // dirs that will be mounted rw instead of only ro
-  "writableDirs": [
-    "~/.cargo",
-    "~/.rustup",
-    "~/.cache",
-    "~/.local/share",
-    "~/.config",
-    "~/.npm"
-  ],
+  "writableDirs": ["~/.cargo", "~/.rustup", "~/.cache", "~/.local/share", "~/.config", "~/.npm"],
   // hosts the default `on` tier may reach — the tier is always proxy-only
   // egress: no network interfaces, all traffic through a local proxy that
   // enforces this list (patterns: github.com, *.github.com, github.com:443).
@@ -48,16 +36,8 @@
   // nix to be a low risk local write.
   // add your own commands to here, but really _think_ about your classification
   "commandClasses": {
-    "WRITE_LOCAL": [
-      "nix",
-      "nix-build",
-      "nix-shell",
-      "nix-env",
-      "nix-collect-garbage"
-    ],
-    "PRIVILEGE_OR_PERMISSION": [
-      "nixos-rebuild"
-    ],
+    "WRITE_LOCAL": ["nix", "nix-build", "nix-shell", "nix-env", "nix-collect-garbage"],
+    "PRIVILEGE_OR_PERMISSION": ["nixos-rebuild"],
   },
   "overrides": {
     "allowHeads": [],
