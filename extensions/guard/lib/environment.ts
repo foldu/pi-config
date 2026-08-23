@@ -11,14 +11,70 @@
  * network egress without socat. Callers should surface `installHint()`.
  */
 
-import { access, constants } from "node:fs/promises";
-import { join } from "node:path";
+import { access, constants, stat } from "node:fs/promises";
+import { dirname, join } from "node:path";
 
 export interface RuntimeDeps {
   /** Resolved absolute path, or null when missing from PATH. */
   bwrap: string | null;
   bash: string | null;
   socat: string | null;
+}
+
+export interface HiddenMount {
+  kind: "tmpfs" | "null-bind";
+  target: string;
+}
+
+/**
+ * Classify config `hiddenPaths` for bwrap. Directories (and missing paths)
+ * get an empty tmpfs mounted over them so their contents vanish; regular
+ * files get /dev/null bound over them so reads return empty. bwrap can't
+ * mount a tmpfs on top of a regular file, hence the split. Applied AFTER the
+ * writableDirs binds (so they win over writable mounts) and BEFORE the ssh
+ * agent bind (so the forwarded socket stays visible).
+ */
+/**
+ * Classify config `hiddenPaths` for bwrap. Directories get an empty tmpfs
+ * mounted over them so their contents vanish; regular files get /dev/null
+ * bound over them so reads return empty. bwrap can't mount a tmpfs on top of
+ * a regular file, hence the split.
+ *
+ * Missing paths: a name like `~/.ssh/id_` (CARE's SECRET_READ_PATHS prefix
+ * form) isn't a real file — mounting over it would hide nothing. When `home`
+ * is given, a missing path under it falls back to hiding the parent dir
+ * (never HOME itself — that would wipe the project view — and never a system
+ * dir, since hiding /etc would break the sandbox). Anything else gets an
+ * empty tmpfs at the exact path, which is harmless when nothing exists there.
+ *
+ * Applied AFTER every other FS mount (/tmp, /var/tmp, writableDirs, the net
+ * bridge) so nothing can shadow the hiding; loses only to the agent bind.
+ */
+export async function hiddenPathMounts(paths: string[], home?: string): Promise<HiddenMount[]> {
+  const out: HiddenMount[] = [];
+  const homePrefix = home ? `${home.replace(/\/+$/, "")}/` : null;
+  for (const raw of paths) {
+    const p = raw.replace(/\/+$/, "");
+    try {
+      const st = await stat(p);
+      out.push(st.isDirectory() ? { kind: "tmpfs", target: p } : { kind: "null-bind", target: p });
+    } catch {
+      const parent = dirname(p);
+      if (homePrefix && p.startsWith(homePrefix) && parent !== homePrefix.slice(0, -1)) {
+        out.push({ kind: "tmpfs", target: parent }); // prefix → hide the dir
+      } else {
+        out.push({ kind: "tmpfs", target: p });
+      }
+    }
+  }
+  // The same target can resolve twice (e.g. ~/.ssh via both the "~/.ssh/id_"
+  // prefix and "~/.ssh/authorized_keys") — collapse duplicates.
+  const seen = new Set<string>();
+  return out.filter((m) => {
+    if (seen.has(m.target)) return false;
+    seen.add(m.target);
+    return true;
+  });
 }
 
 /**

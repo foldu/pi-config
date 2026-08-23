@@ -29,10 +29,16 @@ import {
 import { Type } from "typebox";
 import { analyze } from "./lib/care/engine.ts";
 import { resolve as resolveCare } from "./lib/care/resolution.ts";
+import { SECRET_READ_PATHS } from "./lib/care/path.ts";
 import { CLASS_MEANING } from "./lib/care/types.ts";
 import { formatBashCommand } from "./lib/bash-format.ts";
 import { guardTierCompletions } from "./lib/guard-completions.ts";
-import { checkRuntimeDeps, installHint, buildSandboxEnv } from "./lib/environment.ts";
+import {
+  checkRuntimeDeps,
+  installHint,
+  buildSandboxEnv,
+  hiddenPathMounts,
+} from "./lib/environment.ts";
 import type { RuntimeDeps } from "./lib/environment.ts";
 import { NetworkPolicy } from "./lib/egress/policy.ts";
 import { startProxies } from "./lib/egress/proxy.ts";
@@ -69,6 +75,11 @@ interface CareConfig {
    * Subcommand-aware heads (git, rm, chmod, dd, docker/podman, kill, sed -i)
    * keep their subcommand logic. */
   commandClasses: Record<string, string[]>;
+  /** Paths (supports a leading ~) whose contents are hidden inside the
+   * sandbox — stricter than read-only: directories become empty tmpfs, files
+   * become /dev/null, so sandboxed commands can't read identity material
+   * (ssh keys, agent sockets, cloud credentials) at all. */
+  hiddenPaths: string[];
   overrides: {
     allowHeads: string[];
     denyHeads: string[];
@@ -87,6 +98,7 @@ const DEFAULT_CONFIG: CareConfig = {
   deniedHosts: [],
   allowedEnv: [],
   commandClasses: {},
+  hiddenPaths: SECRET_READ_PATHS,
   overrides: { allowHeads: [], denyHeads: [], allowPaths: [], denyPaths: [] },
 };
 
@@ -103,11 +115,20 @@ function loadConfig(): CareConfig {
       ...DEFAULT_CONFIG,
       ...raw,
       commandClasses: sanitizeCommandClasses(raw.commandClasses),
+      hiddenPaths: sanitizeHiddenPaths(raw.hiddenPaths),
       overrides: { ...DEFAULT_CONFIG.overrides, ...raw.overrides },
     };
   } catch {
     return DEFAULT_CONFIG;
   }
+}
+
+/** hiddenPaths is *additive*: the CARE SECRET_READ_PATHS prefill always stays,
+ * and the config's own entries are appended (deduped). An empty `[]` in
+ * guard.jsonc therefore means "just the prefill". */
+function sanitizeHiddenPaths(raw: unknown): string[] {
+  const extra = Array.isArray(raw) ? raw.filter((p): p is string => typeof p === "string") : [];
+  return [...new Set([...SECRET_READ_PATHS, ...extra])];
 }
 
 /** Validate the config `commandClasses` record: keep valid RiskClass keys,
@@ -343,9 +364,6 @@ async function wrapInBwrap(command: string, cwd: string, t: Tier): Promise<strin
     const runtimeDir = userRuntimeDir();
     if (runtimeDir) args.push("--tmpfs", runtimeDir);
   }
-  // The agent socket bind goes last: mounts apply in order, so anything
-  // mounted over ~/.cache earlier (writableDirs) would shadow it.
-  if (sshAgentBind) args.push("--bind", sshAgentBind[0], sshAgentBind[1]);
   args.push(
     "--dev",
     "/dev",
@@ -387,6 +405,29 @@ async function wrapInBwrap(command: string, cwd: string, t: Tier): Promise<strin
     // bridge === null (socat/proxy failed): still unshare-net below, so the
     // sandbox has NO egress at all — fail closed, never bypass the whitelist.
   }
+
+  // Hidden paths: contents made invisible to sandboxed commands (empty tmpfs
+  // over dirs, /dev/null over files) — stricter than the read-only root, for
+  // identity material that shouldn't be readable at all. Mounted AFTER every
+  // other FS mount (/tmp, /var/tmp, /dev, /proc, writableDirs, the net
+  // bridge): mounts apply in order, so this is the only way they win over
+  // e.g. the real /tmp bind. They lose only to the agent bind below, so the
+  // forwarded agent socket stays visible even if ~/.cache/guard is hidden.
+  //
+  // When the agent is forwarded (sshForward), sandboxed ssh needs its config
+  // to function — the prefilled ~/.ssh hide is skipped entirely, leaving the
+  // dir read-only via the root ro-bind (no extra mount, and deliberately no
+  // writable bind: nothing can write the real ~/.ssh, so host keys don't
+  // persist and accept-new re-warns per host). The strict hide applies
+  // whenever the agent is NOT forwarded.
+  for (const m of await hiddenPathMounts(config.hiddenPaths.map(expandHome), homedir())) {
+    if (sshForward && m.kind === "tmpfs" && m.target === join(homedir(), ".ssh")) continue;
+    if (m.kind === "tmpfs") args.push("--tmpfs", m.target);
+    else args.push("--bind", "/dev/null", m.target);
+  }
+  // The agent socket bind goes last of all: it must survive every other
+  // mount (writableDirs, hidden paths) to keep the forwarded socket visible.
+  if (sshAgentBind) args.push("--bind", sshAgentBind[0], sshAgentBind[1]);
 
   if (unshareNet) args.push("--unshare-net");
   args.push(

@@ -3,7 +3,13 @@ import assert from "node:assert/strict";
 import { chmod, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildSandboxEnv, checkRuntimeDeps, findBinary, installHint } from "../lib/environment.ts";
+import {
+  buildSandboxEnv,
+  checkRuntimeDeps,
+  findBinary,
+  hiddenPathMounts,
+  installHint,
+} from "../lib/environment.ts";
 
 async function withTempDirs(
   spec: Array<[string, boolean]>, // [dirName, executable] relative to base
@@ -121,6 +127,66 @@ test("buildSandboxEnv skips unset vars and dedupes against the base", () => {
   assert.equal(out.filter(([k]) => k === "HOME").length, 1);
   assert.equal(out.filter(([k]) => k === "PWD").length, 1);
   assert.ok(!out.some(([k]) => k === "TERM")); // unset in env → skipped
+});
+
+test("hiddenPathMounts classifies dirs as tmpfs and files as null-bind", async () => {
+  const base = join(
+    tmpdir(),
+    `guard-hidden-test-${process.pid}-${Math.random().toString(36).slice(2)}`,
+  );
+  await mkdir(join(base, "keysdir"), { recursive: true });
+  await writeFile(join(base, "creds"), "SECRET");
+  try {
+    const mounts = await hiddenPathMounts([
+      join(base, "keysdir"),
+      join(base, "creds"),
+      join(base, "does-not-exist"),
+    ]);
+    assert.deepEqual(mounts, [
+      { kind: "tmpfs", target: join(base, "keysdir") },
+      { kind: "null-bind", target: join(base, "creds") },
+      { kind: "tmpfs", target: join(base, "does-not-exist") },
+    ]);
+  } finally {
+    await rm(base, { recursive: true, force: true });
+  }
+});
+
+test("hiddenPathMounts returns nothing for an empty list", async () => {
+  assert.deepEqual(await hiddenPathMounts([]), []);
+});
+
+test("hiddenPathMounts falls back to the parent dir for missing paths under home", async () => {
+  const base = join(
+    tmpdir(),
+    `guard-hidden-test-${process.pid}-${Math.random().toString(36).slice(2)}`,
+  );
+  await mkdir(join(base, ".ssh"), { recursive: true });
+  try {
+    // ~/.ssh/id_ is a SECRET_READ_PATHS prefix, not a real file → hide ~/.ssh.
+    const mounts = await hiddenPathMounts([join(base, ".ssh", "id_")], base);
+    assert.deepEqual(mounts, [{ kind: "tmpfs", target: join(base, ".ssh") }]);
+  } finally {
+    await rm(base, { recursive: true, force: true });
+  }
+});
+
+test("hiddenPathMounts never hides HOME itself", async () => {
+  const base = join(
+    tmpdir(),
+    `guard-hidden-test-${process.pid}-${Math.random().toString(36).slice(2)}`,
+  );
+  await mkdir(base, { recursive: true });
+  try {
+    // ~/.netrc is a missing file whose parent is HOME → must NOT hide HOME.
+    const mounts = await hiddenPathMounts([join(base, ".netrc")], base);
+    assert.deepEqual(mounts, [{ kind: "tmpfs", target: join(base, ".netrc") }]);
+    // Missing paths outside home never touch a parent either.
+    const sys = await hiddenPathMounts(["/etc/definitely-not-a-real-file"]);
+    assert.deepEqual(sys, [{ kind: "tmpfs", target: "/etc/definitely-not-a-real-file" }]);
+  } finally {
+    await rm(base, { recursive: true, force: true });
+  }
 });
 
 test("buildSandboxEnv sets SSH_AUTH_SOCK only when sshAuthSock is provided", () => {

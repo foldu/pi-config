@@ -22,7 +22,7 @@ const CRITICAL_PATH_PATTERNS: RegExp[] = [
   /\/sys\/kernel\/(kexec|debug|tracing|security)\b/,
 ];
 
-const SECRET_READ_PATHS = [
+export const SECRET_READ_PATHS = [
   "~/.ssh/id_",
   "~/.ssh/authorized_keys",
   "~/.aws/credentials",

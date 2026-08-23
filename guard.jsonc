@@ -39,6 +39,10 @@
     "WRITE_LOCAL": ["nix", "nix-build", "nix-shell", "nix-env", "nix-collect-garbage"],
     "PRIVILEGE_OR_PERMISSION": ["nixos-rebuild"],
   },
+  // paths whose contents are hidden inside the sandbox (stricter than
+  // read-only): directories become empty tmpfs, files become /dev/null, so
+  // sandboxed commands can't read identity material at all
+  "hiddenPaths": [],
   "overrides": {
     "allowHeads": [],
     "denyHeads": [],

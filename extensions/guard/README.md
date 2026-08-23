@@ -31,9 +31,22 @@ doesn't get approval fatigue.
 Containment for approved bash commands. Each command runs inside bubblewrap.
 
 The hard security boundary. Stops fallout from bad commands that weren't found by
-the judge. 
+the judge. Mounts root RO and your project dir RW, so there is some sort of barrier.
 
-TODO: not strict enough
+Also excludes paths from the CARE paper, so there is at least some sort of hard fallback for these.
+
+TODO: explore idea of an allow only sandbox
+
+#### Sandboxing and ssh
+
+`~/.ssh` is completely hidden in normal operation. Of course, you may want
+the agent to be able to ssh somewhere, which you can toggle with `/guard allow-ssh`.
+This passes through your `SSH_AUTH_SOCK` _and_ your `~/.ssh` dir (ro) to the agent.
+
+This is a usability tradeoff. The way I use ssh is to have all the keys in the agent
+and identifying public keys mapped to the ones in the ssh agent in `~/.ssh`. For this
+kind of usage, this is fine. If you however store your private keys in `~/.ssh`, this
+of course allows the agent full access to exfiltrate them.
 
 ### 3. Prompting: monke in the loop
 
@@ -55,8 +68,11 @@ via shfmt, because LLMs like to produce code golfed scripts that are hard to rea
 TODO
 
 ## TODOs and problems
+
 - The sandbox isn't strict enough. The read/write prompting is far more strict, which is a big difference in capabilities
 - Sandbox should have some sort of allowed hosts
+- Hole in deny logic for CARE: Just let the agent write down something destructive in a bash script. Then
+  execute it: CARE grade downgraded
 
 ## Invariants
 
