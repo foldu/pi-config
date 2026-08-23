@@ -3,7 +3,7 @@
 import { performance } from "node:perf_hooks";
 import { normalize } from "./canonicalize.ts";
 import { analyzeStructure } from "./structure.ts";
-import { classify } from "./semantic.ts";
+import { buildCommandClassMap, classify } from "./semantic.ts";
 import { validatePath } from "./path.ts";
 import { detectPatterns } from "./pattern.ts";
 import { compose, decide, DEFAULT_POLICY, type PolicyConfig } from "./policy.ts";
@@ -15,6 +15,11 @@ export interface EngineOptions {
   workspace?: string;
   mode?: OperatingMode;
   policy?: PolicyConfig;
+  /** Config `commandClasses` overrides ({ CLASS: [prog, …] }, e.g.
+   * { "WRITE_LOCAL": ["nix"] }). Takes precedence over the built-in lexicon
+   * for generic commands; subcommand-aware heads (git, rm, chmod, dd,
+   * docker/podman, kill, sed -i) keep their logic. */
+  commandClasses?: Record<string, string[]>;
 }
 
 function round(n: number): number {
@@ -33,6 +38,8 @@ export function analyze(cmd: string, options: EngineOptions = {}): AnalysisResul
   const raw = cmd;
   const norm = normalize(cmd);
 
+  const classMap = buildCommandClassMap(options.commandClasses);
+
   // L1 structure
   const ast = analyzeStructure(norm);
   if (ast.structureRisk > 0) triggered.push("L1_AST");
@@ -42,7 +49,7 @@ export function analyze(cmd: string, options: EngineOptions = {}): AnalysisResul
   let semScore = 0;
   let bestCls: RiskClass | null = null;
   for (const atom of ast.atoms) {
-    const s = classify(atom);
+    const s = classify(atom, classMap);
     semDetails.push({
       atom: atom.slice(0, 120),
       riskClass: s.riskClass,

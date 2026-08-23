@@ -11,9 +11,9 @@
     },
     "defaultTier": {
       "type": "string",
-      "enum": ["off", "on", "net", "readonly"],
+      "enum": ["off", "on", "net", "isolated", "readonly"],
       "default": "on",
-      "description": "Safety tier at startup. off = no sandbox, everything prompts (CARE still blocks DENY); on = sandbox, no network, CARE-graded auto-allow; net = sandbox with network; readonly = everything read-only, writes blocked."
+      "description": "Safety tier at startup. off = no sandbox, everything prompts (CARE still blocks DENY); on = sandbox, whitelisted network via proxy-only egress, new hosts prompt; net = sandbox with full host network (whitelist ignored); isolated = sandbox, no network; readonly = everything read-only, writes and network blocked."
     },
     "mode": {
       "type": "string",
@@ -56,6 +56,29 @@
       "items": { "type": "string" },
       "default": [],
       "description": "Environment variables passed through to sandboxed commands, in addition to the fixed base (HOME, PATH, TERM, LANG, LC_ALL, TZ, USER, LOGNAME, SHELL, PWD, XDG_RUNTIME_DIR). Everything else is stripped from the sandbox env — secrets are opt-in, e.g. CARGO_REGISTRY_TOKEN."
+    },
+    "commandClasses": {
+      "type": "object",
+      "default": {},
+      "propertyNames": {
+        "enum": [
+          "READ_ONLY",
+          "WRITE_LOCAL",
+          "WRITE_SENSITIVE",
+          "NETWORK_FETCH",
+          "EXECUTION_CHAIN",
+          "PRIVILEGE_OR_PERMISSION",
+          "PERSISTENCE",
+          "DESTRUCTIVE",
+          "RESOURCE_ABUSE",
+          "UNKNOWN"
+        ]
+      },
+      "additionalProperties": {
+        "type": "array",
+        "items": { "type": "string" }
+      },
+      "description": "Per-class command overrides: { \"WRITE_LOCAL\": [\"nix\"] } reclassifies the listed command heads — config wins over the built-in lexicon (the class's base score and path boosts still apply). Subcommand-aware heads (git, rm, chmod, dd, docker/podman, kill, sed -i) keep their subcommand logic."
     },
     "overrides": {
       "type": "object",

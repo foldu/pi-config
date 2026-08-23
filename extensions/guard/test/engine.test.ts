@@ -47,6 +47,65 @@ describe("canonicalization (Stage 1)", () => {
   });
 });
 
+describe("config commandClasses overrides", () => {
+  it("reclassifies an unknown command into a configured class", () => {
+    // kustomize has no lexicon entry → UNKNOWN (0.35). Configured → READ_ONLY.
+    const r = analyze("kustomize build", { commandClasses: { READ_ONLY: ["kustomize"] } });
+    const sem = r.details.semantic.find((s) => s.atom.startsWith("kustomize"));
+    assert.equal(sem?.riskClass, "READ_ONLY");
+    assert.equal(sem?.score, 0);
+    assert.equal(r.decision, "ALLOW");
+  });
+
+  it("config wins over the built-in lexicon", () => {
+    const r = analyze("curl -sS https://example.com/x", {
+      commandClasses: { READ_ONLY: ["curl"] },
+    });
+    const sem = r.details.semantic.find((s) => s.atom.startsWith("curl"));
+    assert.equal(sem?.riskClass, "READ_ONLY");
+    assert.equal(sem?.score, 0);
+  });
+
+  it("keeps the built-in class when the command is not configured", () => {
+    const r = analyze("curl -sS https://example.com/x");
+    const sem = r.details.semantic.find((s) => s.atom.startsWith("curl"));
+    assert.equal(sem?.riskClass, "NETWORK_FETCH");
+  });
+
+  it("ignores unknown class keys", () => {
+    const r = analyze("curl -sS https://example.com/x", {
+      commandClasses: { NOT_A_CLASS: ["curl"] },
+    });
+    const sem = r.details.semantic.find((s) => s.atom.startsWith("curl"));
+    assert.equal(sem?.riskClass, "NETWORK_FETCH");
+  });
+
+  it("does not touch subcommand-aware heads", () => {
+    // git keeps its subcommand logic even when configured:
+    // `git config` is READ_ONLY, `git reset HEAD` is WRITE_LOCAL,
+    // `git reset --hard` is DESTRUCTIVE.
+    const ro = analyze("git config --list", { commandClasses: { DESTRUCTIVE: ["git"] } });
+    const semRo = ro.details.semantic.find((s) => s.atom.startsWith("git"));
+    assert.equal(semRo?.riskClass, "READ_ONLY");
+
+    const wl = analyze("git reset HEAD", { commandClasses: { READ_ONLY: ["git"] } });
+    const semWl = wl.details.semantic.find((s) => s.atom.startsWith("git"));
+    assert.equal(semWl?.riskClass, "WRITE_LOCAL");
+
+    const hard = analyze("git reset --hard HEAD", { commandClasses: { READ_ONLY: ["git"] } });
+    const semHard = hard.details.semantic.find((s) => s.atom.startsWith("git"));
+    assert.equal(semHard?.riskClass, "DESTRUCTIVE");
+  });
+
+  it("still applies the secret-path boost to configured classes", () => {
+    const r = analyze("touch ~/.ssh/authorized_keys", {
+      commandClasses: { WRITE_LOCAL: ["touch"] },
+    });
+    const sem = r.details.semantic.find((s) => s.atom.startsWith("touch"));
+    assert.equal(sem?.riskClass, "WRITE_SENSITIVE");
+  });
+});
+
 describe("engine decisions (Stage 2 + Resolution)", () => {
   const dangerous = [
     "rm -rf /var/log/*",

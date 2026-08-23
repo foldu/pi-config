@@ -29,6 +29,7 @@ import {
 import { Type } from "typebox";
 import { analyze } from "./lib/care/engine.ts";
 import { resolve as resolveCare } from "./lib/care/resolution.ts";
+import { CLASS_MEANING } from "./lib/care/types.ts";
 import { formatBashCommand } from "./lib/bash-format.ts";
 import { guardTierCompletions } from "./lib/guard-completions.ts";
 import { checkRuntimeDeps, installHint, buildSandboxEnv } from "./lib/environment.ts";
@@ -62,6 +63,12 @@ interface CareConfig {
   deniedHosts: string[];
   /** Env vars passed through to sandboxed commands (secrets are opt-in). */
   allowedEnv: string[];
+  /** Per-class command overrides: { "WRITE_LOCAL": ["nix"] } reclassifies
+   * the listed command heads (config wins over the built-in lexicon). Keys
+   * must be valid RiskClass names; unknown keys are dropped with a warning.
+   * Subcommand-aware heads (git, rm, chmod, dd, docker/podman, kill, sed -i)
+   * keep their subcommand logic. */
+  commandClasses: Record<string, string[]>;
   overrides: {
     allowHeads: string[];
     denyHeads: string[];
@@ -79,6 +86,7 @@ const DEFAULT_CONFIG: CareConfig = {
   allowedHosts: [],
   deniedHosts: [],
   allowedEnv: [],
+  commandClasses: {},
   overrides: { allowHeads: [], denyHeads: [], allowPaths: [], denyPaths: [] },
 };
 
@@ -94,11 +102,31 @@ function loadConfig(): CareConfig {
     return {
       ...DEFAULT_CONFIG,
       ...raw,
+      commandClasses: sanitizeCommandClasses(raw.commandClasses),
       overrides: { ...DEFAULT_CONFIG.overrides, ...raw.overrides },
     };
   } catch {
     return DEFAULT_CONFIG;
   }
+}
+
+/** Validate the config `commandClasses` record: keep valid RiskClass keys,
+ * warn once about unknown keys or non-array values. */
+function sanitizeCommandClasses(raw: unknown): Record<string, string[]> {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return {};
+  const out: Record<string, string[]> = {};
+  for (const [cls, progs] of Object.entries(raw)) {
+    if (!Object.hasOwn(CLASS_MEANING, cls)) {
+      console.warn(`guard: ignoring unknown command class "${cls}" in guard.jsonc commandClasses`);
+      continue;
+    }
+    if (!Array.isArray(progs)) {
+      console.warn(`guard: commandClasses["${cls}"] must be an array of command names — ignoring`);
+      continue;
+    }
+    out[cls] = progs.filter((p): p is string => typeof p === "string");
+  }
+  return out;
 }
 
 const config = loadConfig();
@@ -477,20 +505,6 @@ function summarize(r: AnalysisResult): string {
   return bits.length > 0 ? bits.join(" · ") : "no specific evidence";
 }
 
-/** Short plain-English meaning of each risk class (for LLM-readable reasons). */
-const CLASS_MEANING: Partial<Record<RiskClass, string>> = {
-  READ_ONLY: "reads data",
-  WRITE_LOCAL: "writes to project/local files",
-  WRITE_SENSITIVE: "writes to sensitive locations (config, secrets, system dirs)",
-  NETWORK_FETCH: "fetches from the network",
-  EXECUTION_CHAIN: "builds a command from mutable or untrusted input",
-  PRIVILEGE_OR_PERMISSION: "needs elevated privileges or changes permissions",
-  PERSISTENCE: "installs, enables, or auto-starts something persistent",
-  DESTRUCTIVE: "can destroy data (delete, overwrite, format)",
-  RESOURCE_ABUSE: "consumes excessive resources or network traffic",
-  UNKNOWN: "unrecognized behavior",
-};
-
 function shortenCmd(cmd: string, max = 300): string {
   return cmd.length > max ? `${cmd.slice(0, max)}…` : cmd;
 }
@@ -508,7 +522,7 @@ function explainBlock(
   const cls = r.details.semanticMaxClass;
   const clsNote =
     cls && cls !== "READ_ONLY" && cls !== "UNKNOWN"
-      ? `risk class "${cls.replace(/_/g, " ").toLowerCase()}" — ${CLASS_MEANING[cls] ?? "high risk"}`
+      ? `risk class "${cls.replace(/_/g, " ").toLowerCase()}" — ${CLASS_MEANING[cls]}`
       : null;
   const pathNote =
     r.details.path.reason && r.details.path.reason !== "paths_ok"
@@ -577,7 +591,7 @@ async function promptBash(ctx: any, cmd: string, r: AnalysisResult): Promise<boo
 
 async function handleBash(event: any, ctx: any) {
   const cmd: string = event.input.command;
-  const r = analyze(cmd, { mode: config.mode });
+  const r = analyze(cmd, { mode: config.mode, commandClasses: config.commandClasses });
   const f = resolveCare(r);
   let decision: Decision = f.decision;
 

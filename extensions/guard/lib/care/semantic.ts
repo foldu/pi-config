@@ -1,6 +1,6 @@
 // L2 — semantic risk typing (paper Eq. 2).
 import type { RiskClass } from "./types.ts";
-import { CLASS_BASE_SCORE } from "./types.ts";
+import { CLASS_BASE_SCORE, RISK_CLASSES } from "./types.ts";
 import { COMMAND_CLASSES, GIT_SUBCOMMAND_CLASSES } from "./lexicon.ts";
 
 function basename(p: string): string {
@@ -27,7 +27,26 @@ const SECRET_PATHS = [
 
 export type ClassifyResult = { riskClass: RiskClass; score: number; reason: string };
 
-export function classify(atom: string): ClassifyResult {
+/** Flatten a config `commandClasses` record ({ CLASS: [prog, …] }) into a
+ * prog → class lookup. Keys that aren't valid RiskClass names are skipped
+ * (loadConfig warns about them once at startup). */
+export function buildCommandClassMap(
+  classes: Record<string, string[]> | undefined,
+): Map<string, RiskClass> {
+  const map = new Map<string, RiskClass>();
+  if (!classes) return map;
+  for (const cls of RISK_CLASSES) {
+    const progs = classes[cls];
+    if (!progs) continue;
+    for (const p of progs) map.set(p, cls);
+  }
+  return map;
+}
+
+export function classify(
+  atom: string,
+  commandClasses?: ReadonlyMap<string, RiskClass>,
+): ClassifyResult {
   const tokens = atom.trim().split(/\s+/).filter(Boolean);
   if (tokens.length === 0) return { riskClass: "READ_ONLY", score: 0, reason: "empty" };
 
@@ -42,7 +61,7 @@ export function classify(atom: string): ClassifyResult {
   if (prog === "docker" || prog === "podman") return classifyDocker(tokens);
   if (prog === "kill" || prog === "pkill" || prog === "killall") return classifyKill(tokens);
 
-  const cls = COMMAND_CLASSES.get(prog) ?? "UNKNOWN";
+  const cls = commandClasses?.get(prog) ?? COMMAND_CLASSES.get(prog) ?? "UNKNOWN";
   const score = CLASS_BASE_SCORE[cls];
 
   if (touchesSecretPath(tokens)) {
