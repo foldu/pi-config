@@ -137,6 +137,8 @@ test("hiddenPathMounts classifies dirs as tmpfs and files as null-bind", async (
   await mkdir(join(base, "keysdir"), { recursive: true });
   await writeFile(join(base, "creds"), "SECRET");
   try {
+    // Missing path with no parent fallback (no home given) → skipped: bwrap
+    // can't mkdir a mountpoint inside the ro root.
     const mounts = await hiddenPathMounts([
       join(base, "keysdir"),
       join(base, "creds"),
@@ -145,7 +147,6 @@ test("hiddenPathMounts classifies dirs as tmpfs and files as null-bind", async (
     assert.deepEqual(mounts, [
       { kind: "tmpfs", target: join(base, "keysdir") },
       { kind: "null-bind", target: join(base, "creds") },
-      { kind: "tmpfs", target: join(base, "does-not-exist") },
     ]);
   } finally {
     await rm(base, { recursive: true, force: true });
@@ -171,19 +172,33 @@ test("hiddenPathMounts falls back to the parent dir for missing paths under home
   }
 });
 
-test("hiddenPathMounts never hides HOME itself", async () => {
+test("hiddenPathMounts never hides HOME itself and skips absent targets", async () => {
   const base = join(
     tmpdir(),
     `guard-hidden-test-${process.pid}-${Math.random().toString(36).slice(2)}`,
   );
   await mkdir(base, { recursive: true });
   try {
-    // ~/.netrc is a missing file whose parent is HOME → must NOT hide HOME.
-    const mounts = await hiddenPathMounts([join(base, ".netrc")], base);
-    assert.deepEqual(mounts, [{ kind: "tmpfs", target: join(base, ".netrc") }]);
-    // Missing paths outside home never touch a parent either.
-    const sys = await hiddenPathMounts(["/etc/definitely-not-a-real-file"]);
-    assert.deepEqual(sys, [{ kind: "tmpfs", target: "/etc/definitely-not-a-real-file" }]);
+    // ~/.netrc missing, parent is HOME → skip, never hide HOME.
+    assert.deepEqual(await hiddenPathMounts([join(base, ".netrc")], base), []);
+    // Missing system path → skip (nothing to hide).
+    assert.deepEqual(await hiddenPathMounts(["/etc/definitely-not-a-real-file"]), []);
+  } finally {
+    await rm(base, { recursive: true, force: true });
+  }
+});
+
+test("hiddenPathMounts skips parent fallback when the parent is missing too", async () => {
+  const base = join(
+    tmpdir(),
+    `guard-hidden-test-${process.pid}-${Math.random().toString(36).slice(2)}`,
+  );
+  await mkdir(base, { recursive: true });
+  try {
+    // ~/.aws/credentials missing AND ~/.aws doesn't exist → skip. Emitting
+    // --tmpfs ~/.aws would make bwrap try to mkdir inside the ro root and
+    // fail every command ("Can't mkdir …: Read-only file system").
+    assert.deepEqual(await hiddenPathMounts([join(base, ".aws", "credentials")], base), []);
   } finally {
     await rm(base, { recursive: true, force: true });
   }
