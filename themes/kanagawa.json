@@ -50,7 +50,7 @@
     "customMessageText": "fg",
     "customMessageLabel": "function",
     "toolPendingBg": "bgSoft",
-    "toolSuccessBg": "bgGreen",
+    "toolSuccessBg": "",
     "toolErrorBg": "bgRed",
     "toolTitle": "function",
     "toolOutput": "fgDim",
