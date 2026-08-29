@@ -31,13 +31,11 @@ doesn't get approval fatigue.
 Containment for approved bash commands. Each command runs inside bubblewrap.
 
 The hard security boundary. Stops fallout from bad commands that weren't found by
-the judge. Starts from an empty root and binds in only the system closure, your
-project dir (RW), and the configured writable dirs — everything else on the host
-(other home dirs, /root, /var, /opt) is **invisible**, not merely read-only. So
-`~/.ssh`, `~/.aws`, and other users' files aren't just unwritable, they don't
-exist inside the sandbox.
+the judge. Mounts the minimal amount of dirs needed to be realistically usable.
+All the secret files aren't visible by default. Well, except if you stored your secrets in /tmp
+or something.
 
-Also excludes paths from the CARE paper, so there is at least some sort of hard fallback for these.
+Also hard excludes paths from the CARE paper, so there is at least some sort of hard fallback for these.
 
 #### Sandboxing and ssh
 
@@ -71,8 +69,6 @@ TODO
 
 ## TODOs and problems
 
-- The sandbox isn't strict enough. The read/write prompting is far more strict, which is a big difference in capabilities
-- Sandbox should have some sort of allowed hosts
 - Hole in deny logic for CARE: Just let the agent write down something destructive in a bash script. Then
   execute it: CARE grade downgraded
 
