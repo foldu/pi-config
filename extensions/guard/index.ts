@@ -16,7 +16,7 @@
 import { readFileSync } from "node:fs";
 import { access as accessPath, mkdir, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { quote } from "shell-quote";
 import { parse as parseJsonc, type ParseError } from "jsonc-parser";
 import { isToolCallEventType, createLocalBashOperations } from "@earendil-works/pi-coding-agent";
@@ -32,7 +32,7 @@ import { resolve as resolveCare } from "./lib/care/resolution.ts";
 import { SECRET_READ_PATHS } from "./lib/care/path.ts";
 import { CLASS_MEANING } from "./lib/care/types.ts";
 import { formatBashCommand } from "./lib/bash-format.ts";
-import { guardTierCompletions } from "./lib/guard-completions.ts";
+import { guardAddDirCompletions, guardTierCompletions } from "./lib/guard-completions.ts";
 import {
   checkRuntimeDeps,
   installHint,
@@ -161,6 +161,11 @@ let sshForward = false;
 // reads already use. Approval-only: the sandbox, CARE, and bash prompting are
 // untouched.
 let yolo = false;
+// Directories bound into the sandbox at runtime via `/guard add-dir`
+// (read-only by default; `/guard add-dir <path> rw` binds writable — unless
+// the readonly tier, which forces ro like everything else). Session-scoped
+// like the tier: add to guard.jsonc `writableDirs` to persist.
+const extraDirs: Array<{ path: string; writable: boolean }> = [];
 
 // ---------------------------------------------------------------------------
 // net whitelist (srt-style proxy egress for the `on` tier)
@@ -397,12 +402,23 @@ async function wrapInBwrap(command: string, cwd: string, t: Tier): Promise<strin
   )) {
     args.push("--setenv", key, value);
   }
+  // Project + writable dirs (config `writableDirs` + runtime `/guard
+  // add-dir` additions) are bound rw, or ro in the readonly tier. They used
+  // to be visible via the ro root bind — with a whitelist root they must be
+  // bound explicitly or they'd vanish entirely.
+  const bindFlag = t === "readonly" ? "--ro-bind" : "--bind";
+  args.push(bindFlag, cwd, cwd);
+  for (const dir of config.writableDirs) {
+    const abs = expandHome(dir);
+    if (await pathExists(abs)) args.push(bindFlag, abs, abs);
+  }
+  // /guard add-dir dirs: per-dir writable flag (ro by default); the readonly
+  // tier forces ro regardless, matching writableDirs.
+  for (const d of extraDirs) {
+    if (!(await pathExists(d.path))) continue;
+    args.push(d.writable && t !== "readonly" ? "--bind" : "--ro-bind", d.path, d.path);
+  }
   if (t !== "readonly") {
-    args.push("--bind", cwd, cwd); // project dir writable
-    for (const dir of config.writableDirs) {
-      const abs = expandHome(dir);
-      if (await pathExists(abs)) args.push("--bind", abs, abs);
-    }
     // The user's runtime dir (/run/user/<uid>, XDG_RUNTIME_DIR) gets a
     // *private tmpfs*, not a host bind: tools that want a writable runtime
     // dir (podman's exit files, mktemp --tmpdir, …) get a fresh one, but the
@@ -412,15 +428,6 @@ async function wrapInBwrap(command: string, cwd: string, t: Tier): Promise<strin
     // The uid is dynamic, so this can't live in guard.jsonc.
     const runtimeDir = userRuntimeDir();
     if (runtimeDir) args.push("--tmpfs", runtimeDir);
-  } else {
-    // readonly: the project and writable dirs stay *visible*, just read-only
-    // (they used to be ro via the root bind — a whitelist root must bind
-    // them explicitly or they'd vanish entirely).
-    args.push("--ro-bind", cwd, cwd);
-    for (const dir of config.writableDirs) {
-      const abs = expandHome(dir);
-      if (await pathExists(abs)) args.push("--ro-bind", abs, abs);
-    }
   }
   args.push(
     "--dev",
@@ -571,10 +578,14 @@ function createGuardAutocompleteProvider(current: AutocompleteProvider): Autocom
     ): Promise<AutocompleteSuggestions | null> {
       const beforeCursor = (lines[cursorLine] ?? "").slice(0, cursorCol);
       const completion = guardTierCompletions(beforeCursor);
-      if (!completion) {
-        return current.getSuggestions(lines, cursorLine, cursorCol, options);
+      if (completion) {
+        return { prefix: completion.prefix, items: completion.items };
       }
-      return { prefix: completion.prefix, items: completion.items };
+      const pathCompletion = await guardAddDirCompletions(beforeCursor);
+      if (pathCompletion) {
+        return { prefix: pathCompletion.prefix, items: pathCompletion.items };
+      }
+      return current.getSuggestions(lines, cursorLine, cursorCol, options);
     },
     applyCompletion(lines, cursorLine, cursorCol, item, prefix) {
       return current.applyCompletion(lines, cursorLine, cursorCol, item, prefix);
@@ -833,9 +844,10 @@ export default async function (pi: ExtensionAPI) {
   await assertRuntimeDeps(); // mandatory: exits pi when bwrap/socat are missing
   pi.registerCommand("guard", {
     description:
-      "Set the safety tier: /guard off|on|net|isolated|readonly (no arg toggles off/on). /guard allow-ssh [on|off] forwards the host ssh-agent into the sandbox. /guard yolo [on|off] auto-allows writes/edits in the project dir.",
+      "Set the safety tier: /guard off|on|net|isolated|readonly (no arg toggles off/on). /guard allow-ssh [on|off] forwards the host ssh-agent into the sandbox. /guard yolo [on|off] auto-allows writes/edits in the project dir. /guard add-dir <path> [rw] binds an extra dir into the sandbox for the session (ro, rw optional).",
     handler: async (args, ctx) => {
-      const [cmd, ...rest] = (args ?? "").trim().toLowerCase().split(/\s+/);
+      const [cmdRaw, ...rest] = (args ?? "").trim().split(/\s+/);
+      const cmd = (cmdRaw ?? "").toLowerCase(); // keep rest at original case — paths are case-sensitive
       if (cmd === "allow-ssh") {
         const sub = rest[0];
         if (sub !== undefined && sub !== "on" && sub !== "off") {
@@ -878,6 +890,59 @@ export default async function (pi: ExtensionAPI) {
         );
         return;
       }
+      if (cmd === "add-dir") {
+        // optional trailing `rw`/`ro` flag; the rest (joined) is the path
+        let writable = false;
+        let dir = rest.join(" ").trim();
+        const last = rest[rest.length - 1];
+        if (last === "rw" || last === "ro") {
+          writable = last === "rw";
+          dir = rest.slice(0, -1).join(" ").trim();
+        }
+        if (!dir) {
+          ctx.ui.notify(
+            "usage: /guard add-dir <path> [rw] — bind a dir into the sandbox (ro by default, rw optional)",
+            "warning",
+          );
+          return;
+        }
+        const abs = resolve(ctx.cwd, expandHome(dir));
+        if (!(await pathExists(abs))) {
+          ctx.ui.notify(`add-dir: ${abs} does not exist`, "warning");
+          return;
+        }
+        const existing = extraDirs.find((d) => d.path === abs);
+        if (existing) {
+          if (existing.writable !== writable) {
+            existing.writable = writable;
+            ctx.ui.notify(
+              `add-dir: ${abs} now ${writable ? "writable" : "read-only"} in the sandbox`,
+              "info",
+            );
+          } else {
+            ctx.ui.notify(
+              `add-dir: ${abs} is already in the sandbox (${writable ? "writable" : "read-only"})`,
+              "info",
+            );
+          }
+          return;
+        }
+        if (config.writableDirs.some((d) => expandHome(d) === abs)) {
+          ctx.ui.notify(`add-dir: ${abs} is already in the sandbox (writable via config)`, "info");
+          return;
+        }
+        const effective = writable && tier !== "readonly";
+        extraDirs.push({ path: abs, writable });
+        ctx.ui.notify(
+          `add-dir: ${abs} bound ${effective ? "writable" : "read-only"}${
+            tier === "readonly"
+              ? " (readonly tier forces ro)"
+              : " — this session only; add to guard.jsonc writableDirs to persist"
+          }`,
+          "info",
+        );
+        return;
+      }
       const tiers: Tier[] = ["off", "on", "net", "isolated", "readonly"];
       let next: Tier | null = null;
       if (cmd && tiers.includes(cmd as Tier)) {
@@ -898,7 +963,7 @@ export default async function (pi: ExtensionAPI) {
         }
       } else {
         ctx.ui.notify(
-          `Unknown "${args}" — usage: /guard off|on|net|isolated|readonly | allow-ssh [on|off] | yolo [on|off]`,
+          `Unknown "${cmd}" — usage: /guard off|on|net|isolated|readonly | allow-ssh [on|off] | yolo [on|off] | add-dir <path> [rw]`,
           "warning",
         );
       }

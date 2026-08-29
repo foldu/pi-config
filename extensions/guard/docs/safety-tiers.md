@@ -102,6 +102,14 @@ CARE, and bash prompting are untouched, DENY stays a hard block, and the `readon
 tier still forbids bash writes. Like the tier and `allow-ssh`, it is process-scoped and
 does not persist across restarts.
 
+`/guard add-dir <path> [rw]` binds an extra directory into the sandbox for the rest of
+the session — **read-only by default**, `rw` makes it writable (the `readonly` tier
+forces read-only regardless). It's the runtime equivalent of a `writableDirs` entry,
+for when a task needs a dir that isn't in the config; ro-by-default is the fail-closed
+choice for dirs you only want the agent to see. Relative paths resolve against the
+session cwd; `~` works. The dir must exist. Session-scoped like the other toggles —
+add it to `guard.jsonc` `writableDirs` to persist.
+
 The startup tier comes from `guard.jsonc` (validated by `extensions/guard/guard.schema.json`, referenced via the file's `$schema`):
 
 ```json

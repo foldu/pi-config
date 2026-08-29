@@ -1,6 +1,13 @@
+import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { guardTierCompletions, GUARD_TIER_ITEMS } from "../lib/guard-completions.ts";
+import {
+  guardAddDirCompletions,
+  guardTierCompletions,
+  GUARD_TIER_ITEMS,
+} from "../lib/guard-completions.ts";
 
 test("bare `/guard` offers all subcommands with an empty prefix", () => {
   const r = guardTierCompletions("/guard");
@@ -8,7 +15,7 @@ test("bare `/guard` offers all subcommands with an empty prefix", () => {
   assert.equal(r.prefix, "");
   assert.deepEqual(
     r.items.map((i) => i.value),
-    ["off", "on", "net", "isolated", "readonly", "allow-ssh", "yolo"],
+    ["off", "on", "net", "isolated", "readonly", "allow-ssh", "yolo", "add-dir"],
   );
 });
 
@@ -82,4 +89,52 @@ test("non-guard lines return null (delegate to built-in)", () => {
 test("multi-arg or unknown-arg lines return null", () => {
   assert.equal(guardTierCompletions("/guard on extra"), null);
   assert.equal(guardTierCompletions("/guard zz"), null);
+});
+
+test("add-dir completes subcommand name via tier completion", () => {
+  assert.deepEqual(
+    guardTierCompletions("/guard add")!.items.map((i) => i.value),
+    ["add-dir"],
+  );
+});
+
+test("add-dir path completion matches entries in the parent dir", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "guard-compl-"));
+  await mkdir(join(dir, "alpha"));
+  await mkdir(join(dir, "alphadir"));
+  await writeFile(join(dir, "beta.txt"), "");
+
+  const r = await guardAddDirCompletions(`/guard add-dir ${dir}/al`);
+  assert.ok(r);
+  assert.equal(r.prefix, `${dir}/al`);
+  assert.deepEqual(
+    r.items.map((i) => i.value),
+    [`${dir}/alpha/`, `${dir}/alphadir/`],
+  );
+
+  // dirs sort before files, each alphabetical
+  const all = await guardAddDirCompletions(`/guard add-dir ${dir}/`);
+  assert.ok(all);
+  assert.deepEqual(
+    all!.items.map((i) => i.value),
+    [`${dir}/alpha/`, `${dir}/alphadir/`, `${dir}/beta.txt`],
+  );
+  // directories carry a trailing slash (so Tab descends); files don't
+  assert.equal(all!.items[0]!.label, "alpha/");
+  assert.equal(all!.items[2]!.label, "beta.txt");
+});
+
+test("add-dir path completion: ~/ form is kept for home paths", async () => {
+  const r = await guardAddDirCompletions("/guard add-dir ~/.c");
+  assert.ok(r);
+  assert.equal(r.prefix, "~/.c");
+  assert.ok(r.items.every((i) => i.value.startsWith("~/")));
+  assert.ok(r.items.some((i) => i.value === "~/.cache/"));
+});
+
+test("add-dir path completion returns null for non-matching lines", async () => {
+  assert.equal(await guardAddDirCompletions("/guard o"), null);
+  assert.equal(await guardAddDirCompletions("/guard add-"), null); // subcommand partial — tier completion handles it
+  assert.equal(await guardAddDirCompletions("/guard add-dir"), null); // no path token yet — subcommand completion
+  assert.equal(await guardAddDirCompletions("/guard add-dir /nonexistent-guard-dir/"), null);
 });
