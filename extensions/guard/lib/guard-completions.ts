@@ -32,6 +32,11 @@ export const GUARD_TIER_ITEMS: AutocompleteItem[] = [
     label: "allow-ssh",
     description: "forward the host ssh-agent into the sandbox (on/off)",
   },
+  {
+    value: "yolo",
+    label: "yolo",
+    description: "auto-allow write/edit tools inside the project dir (on/off)",
+  },
 ];
 
 // `/guard` optionally followed by whitespace + a partial argument (letters or

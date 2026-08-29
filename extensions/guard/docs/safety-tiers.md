@@ -87,6 +87,14 @@ is auto-allowed."
 `/guard <off|on|net|isolated|readonly>` sets the tier. `/guard` with no argument toggles
 between `off` and `on` (the common switch). The footer shows the current tier.
 
+`/guard yolo [on|off]` is a separate approval-mode toggle (not a tier). It auto-allows
+`write`/`edit` tool calls whose target is inside the project dir — the same containment
+check reads already use — so the machine can edit the repo without per-file prompting
+(the footer shows a `yolo` badge while it is on). It is approval-only: the sandbox,
+CARE, and bash prompting are untouched, DENY stays a hard block, and the `readonly`
+tier still forbids bash writes. Like the tier and `allow-ssh`, it is process-scoped and
+does not persist across restarts.
+
 The startup tier comes from `guard.jsonc` (validated by `extensions/guard/guard.schema.json`, referenced via the file's `$schema`):
 
 ```json

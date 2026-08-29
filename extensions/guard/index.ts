@@ -156,6 +156,11 @@ let tier: Tier = config.defaultTier;
 // fail closed). When on, the host agent socket is bound rw into the sandbox
 // and SSH_AUTH_SOCK points at it; private keys never leave the host.
 let sshForward = false;
+// yolo mode, toggled live via `/guard yolo`: write/edit tool calls inside the
+// project dir are auto-allowed without prompting — the same containment check
+// reads already use. Approval-only: the sandbox, CARE, and bash prompting are
+// untouched.
+let yolo = false;
 
 // ---------------------------------------------------------------------------
 // net whitelist (srt-style proxy egress for the `on` tier)
@@ -453,22 +458,28 @@ function sshForwardMismatch(): boolean {
 }
 
 function sandboxStatus(): string | undefined {
-  const ssh = sshForward ? " · ssh-agent" : "";
+  const extras: string[] = [];
+  if (sshForward) extras.push("ssh-agent");
+  if (yolo) extras.push("yolo");
+  const suffix = extras.length > 0 ? ` · ${extras.join(" · ")}` : "";
   let text: string | undefined;
   switch (tier) {
     case "off":
-      return undefined;
+      // yolo is an approval-mode toggle, not containment, so it still shows
+      // with the sandbox off (writes prompt only when yolo is off). No badge
+      // otherwise, to keep the footer quiet in the common no-sandbox state.
+      return yolo ? `🛡 guard OFF · yolo` : undefined;
     case "net":
-      text = `🛡 guard ON · full net${ssh}`;
+      text = `🛡 guard ON · full net${suffix}`;
       break;
     case "isolated":
-      text = `🛡 guard ON · no net${ssh}`;
+      text = `🛡 guard ON · no net${suffix}`;
       break;
     case "readonly":
-      text = `🛡 guard ON · read-only${ssh}`;
+      text = `🛡 guard ON · read-only${suffix}`;
       break;
     default:
-      text = `🛡 guard ON · whitelist net${ssh}`;
+      text = `🛡 guard ON · whitelist net${suffix}`;
   }
   // Red when ssh-agent is forwarded but the tier has no direct network: plain
   // ssh can't reach anything — the combo is almost certainly a mistake.
@@ -693,6 +704,14 @@ async function handleNonBash(event: any, ctx: any) {
     const target = await canonical(ctx.cwd, event.input.path);
     if (await isReadAllowed(ctx.cwd, target, await getAllowedReadRoots())) return undefined;
   }
+  // yolo mode: write/edit tools get the same auto-allow as reads when their
+  // target is inside the project (or the allowed read dirs). Approval-only —
+  // the sandbox, CARE, and bash prompting are untouched.
+  if (yolo && (isToolCallEventType("write", event) || isToolCallEventType("edit", event))) {
+    const rawPath = String((event.input as { path?: string }).path ?? "");
+    const target = await canonical(ctx.cwd, rawPath);
+    if (await isReadAllowed(ctx.cwd, target, await getAllowedReadRoots())) return undefined;
+  }
   if (!ctx.hasUI) {
     return { block: true, reason: `Blocked: no UI to confirm tool "${event.toolName}"` };
   }
@@ -746,7 +765,7 @@ export default async function (pi: ExtensionAPI) {
   await assertRuntimeDeps(); // mandatory: exits pi when bwrap/socat are missing
   pi.registerCommand("guard", {
     description:
-      "Set the safety tier: /guard off|on|net|isolated|readonly (no arg toggles off/on). /guard allow-ssh [on|off] forwards the host ssh-agent into the sandbox.",
+      "Set the safety tier: /guard off|on|net|isolated|readonly (no arg toggles off/on). /guard allow-ssh [on|off] forwards the host ssh-agent into the sandbox. /guard yolo [on|off] auto-allows writes/edits in the project dir.",
     handler: async (args, ctx) => {
       const [cmd, ...rest] = (args ?? "").trim().toLowerCase().split(/\s+/);
       if (cmd === "allow-ssh") {
@@ -774,6 +793,23 @@ export default async function (pi: ExtensionAPI) {
         }
         return;
       }
+      if (cmd === "yolo") {
+        const sub = rest[0];
+        if (sub !== undefined && sub !== "on" && sub !== "off") {
+          ctx.ui.notify("usage: /guard yolo [on|off]", "warning");
+          return;
+        }
+        const enable = sub === undefined ? !yolo : sub === "on";
+        yolo = enable;
+        ctx.ui.setStatus("guard", sandboxStatus());
+        ctx.ui.notify(
+          enable
+            ? "yolo: writes/edits inside the project dir are auto-allowed (no prompt); DENY and bash prompting still apply"
+            : "yolo off: writes/edits prompt again",
+          enable ? "warning" : "info",
+        );
+        return;
+      }
       const tiers: Tier[] = ["off", "on", "net", "isolated", "readonly"];
       let next: Tier | null = null;
       if (cmd && tiers.includes(cmd as Tier)) {
@@ -794,7 +830,7 @@ export default async function (pi: ExtensionAPI) {
         }
       } else {
         ctx.ui.notify(
-          `Unknown "${args}" — usage: /guard off|on|net|isolated|readonly | allow-ssh [on|off]`,
+          `Unknown "${args}" — usage: /guard off|on|net|isolated|readonly | allow-ssh [on|off] | yolo [on|off]`,
           "warning",
         );
       }

@@ -8,7 +8,7 @@ test("bare `/guard` offers all subcommands with an empty prefix", () => {
   assert.equal(r.prefix, "");
   assert.deepEqual(
     r.items.map((i) => i.value),
-    ["off", "on", "net", "isolated", "readonly", "allow-ssh"],
+    ["off", "on", "net", "isolated", "readonly", "allow-ssh", "yolo"],
   );
 });
 
@@ -41,6 +41,21 @@ test("case-insensitive argument matching", () => {
   assert.deepEqual(
     guardTierCompletions("/guard OFF")!.items.map((i) => i.value),
     ["off"],
+  );
+});
+
+test("yolo completes", () => {
+  assert.deepEqual(
+    guardTierCompletions("/guard y")!.items.map((i) => i.value),
+    ["yolo"],
+  );
+  assert.deepEqual(
+    guardTierCompletions("/guard yol")!.items.map((i) => i.value),
+    ["yolo"],
+  );
+  assert.deepEqual(
+    guardTierCompletions("/guard yolo")!.items.map((i) => i.value),
+    ["yolo"],
   );
 });
 
