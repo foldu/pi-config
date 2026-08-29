@@ -31,11 +31,13 @@ doesn't get approval fatigue.
 Containment for approved bash commands. Each command runs inside bubblewrap.
 
 The hard security boundary. Stops fallout from bad commands that weren't found by
-the judge. Mounts root RO and your project dir RW, so there is some sort of barrier.
+the judge. Starts from an empty root and binds in only the system closure, your
+project dir (RW), and the configured writable dirs — everything else on the host
+(other home dirs, /root, /var, /opt) is **invisible**, not merely read-only. So
+`~/.ssh`, `~/.aws`, and other users' files aren't just unwritable, they don't
+exist inside the sandbox.
 
 Also excludes paths from the CARE paper, so there is at least some sort of hard fallback for these.
-
-TODO: explore idea of an allow only sandbox
 
 #### Sandboxing and ssh
 

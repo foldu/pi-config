@@ -21,10 +21,10 @@ is auto-allowed."
 | Tier | bwrap sandbox | Network | ALLOW | WARN | DENY |
 |------|---------------|---------|-------|------|------|
 | `off` | none — real host | host | prompt | prompt | block |
-| `on` (default) | on, RO root + writable caches | **whitelist** (new hosts prompt) | auto | prompt | block |
+| `on` (default) | on, default-deny root + writable caches | **whitelist** (new hosts prompt) | auto | prompt | block |
 | `net` | on | **full host** | auto | prompt | block |
 | `isolated` | on | **none** | auto | prompt | block |
-| `readonly` | on, **everything RO** | none | auto (reads) | prompt (reads) | block (writes too) |
+| `readonly` | on, **everything visible is RO** | none | auto (reads) | prompt (reads) | block (writes too) |
 
 ### `off` — no containment, everything asked
 
@@ -39,7 +39,13 @@ is auto-allowed."
 
 ### `on` — the default: whitelisted network, new hosts prompt
 
-- bwrap with read-only root, the project dir + `WRITABLE_DIRS` bound writable, the real
+- bwrap with a **whitelist root**: the sandbox starts from an empty root and
+  only the system closure (/nix, /run/current-system, /usr, /etc — TLS certs,
+  passwd, DNS), the project dir, `WRITABLE_DIRS`, and the user's own PATH bin
+  dirs (~/.nix-profile/bin, ~/.local/bin, …) are bound in. Everything else on
+  the host — every other home dir, /root, /var, /opt, /srv — is **invisible**, not
+  merely read-only: a sandboxed command can't read what it can't see. Project +
+  `WRITABLE_DIRS` bound writable, the real
   `/tmp` and `/var/tmp` bound writable (persistent across commands, not a fresh tmpfs),
   pid/ipc/uts namespaces, `--cap-drop ALL`.
 - **Network is proxy-only egress.** The sandbox gets `--unshare-net` (zero interfaces),
@@ -73,9 +79,10 @@ is auto-allowed."
 
 ### `readonly` — the agent may only read
 
-- bwrap with **everything read-only** (the project dir is *not* bound writable; only the
-  real `/tmp` and `/var/tmp` are bound writable so staged files persist), no network,
-  same namespaces and caps.
+- bwrap with **everything read-only**: the project and `WRITABLE_DIRS` are bound
+  read-only (only the real `/tmp` and `/var/tmp` are bound writable so staged
+  files persist); nothing else on the host is visible. No network, same
+  namespaces and caps.
 - **Write-context commands are blocked** (`{ block: true, reason: "read-only mode" }`)
   before execution — fail fast rather than let them die on the read-only bind.
 - **Reads are still CARE-graded**, not blindly allowed: `cat /etc/passwd` still WARNs

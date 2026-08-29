@@ -16,7 +16,7 @@
 import { readFileSync } from "node:fs";
 import { access as accessPath, mkdir, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { quote } from "shell-quote";
 import { parse as parseJsonc, type ParseError } from "jsonc-parser";
 import { isToolCallEventType, createLocalBashOperations } from "@earendil-works/pi-coding-agent";
@@ -290,6 +290,24 @@ function expandHome(p: string): string {
   return p; // `~user/...` left as-is
 }
 
+/** PATH entries that live under $HOME (e.g. ~/.nix-profile/bin, ~/.local/bin,
+ * ~/bin). These are ro-bound into the sandbox so the user's own installed
+ * tools stay runnable — home itself is default-invisible, but whatever the
+ * real PATH exposes from home must be reachable. Derived from the actual PATH
+ * so the exposed set tracks what the user has installed, no config needed.
+ * Entries equal to home itself are skipped (binding home ro would expose the
+ * whole home through a PATH accident). */
+function homePathDirs(pathEnv = process.env.PATH ?? ""): string[] {
+  const home = homedir();
+  const out = new Set<string>();
+  for (const entry of pathEnv.split(":")) {
+    if (!entry.startsWith("/")) continue; // relative PATH entries aren't dirs
+    const p = entry.startsWith("~/") ? join(home, entry.slice(2)) : entry;
+    if (p.startsWith(`${home}/`)) out.add(p);
+  }
+  return [...out];
+}
+
 /**
  * The current user's per-user runtime dir, e.g. `/run/user/1000`
  * (XDG_RUNTIME_DIR's standard location). Undefined when unknown (non-POSIX).
@@ -319,7 +337,33 @@ async function wrapInBwrap(command: string, cwd: string, t: Tier): Promise<strin
       `guard: bash not found on PATH — cannot run commands inside the sandbox. Install with: ${installHint("bash")}`,
     );
   }
-  const args: string[] = ["bwrap", "--ro-bind", "/", "/"]; // read-only root
+  // Whitelist root, NOT `--ro-bind / /`: the sandbox starts from an empty
+  // tmpfs root and only the dirs below are bound in. Everything else on the
+  // host — every other home dir, /root, /var, /opt, /srv, … — does not
+  // exist inside the sandbox. A read-only root bind left all of it *visible*
+  // (read-only, but readable: ~/.ssh, ~/.aws, cloud credentials, other
+  // users' files). Default-deny visibility is the containment.
+  // --ro-bind-try skips paths that don't exist (non-NixOS).
+  const args: string[] = ["bwrap"];
+  for (const p of [
+    "/nix",
+    "/run/current-system",
+    "/usr",
+    "/bin",
+    "/sbin",
+    "/lib",
+    "/lib64",
+    "/etc",
+  ]) {
+    args.push("--ro-bind-try", p, p); // /etc: TLS certs, passwd, resolv.conf
+  }
+  // Empty, writable $HOME first (bwrap --dir creates parents): tools that
+  // `cd ~` or write dotfiles (git, pip, node) keep working. Nothing of the
+  // real home shows through it.
+  args.push("--dir", homedir());
+  for (const dir of homePathDirs()) {
+    args.push("--ro-bind-try", dir, dir);
+  }
   // SSH agent passthrough (`/guard allow-ssh`): bind the host agent socket rw
   // into the sandbox at a guard-owned path and point SSH_AUTH_SOCK at it.
   // The bind itself is appended AFTER the FS binds below — mount order
@@ -368,6 +412,15 @@ async function wrapInBwrap(command: string, cwd: string, t: Tier): Promise<strin
     // The uid is dynamic, so this can't live in guard.jsonc.
     const runtimeDir = userRuntimeDir();
     if (runtimeDir) args.push("--tmpfs", runtimeDir);
+  } else {
+    // readonly: the project and writable dirs stay *visible*, just read-only
+    // (they used to be ro via the root bind — a whitelist root must bind
+    // them explicitly or they'd vanish entirely).
+    args.push("--ro-bind", cwd, cwd);
+    for (const dir of config.writableDirs) {
+      const abs = expandHome(dir);
+      if (await pathExists(abs)) args.push("--ro-bind", abs, abs);
+    }
   }
   args.push(
     "--dev",
@@ -378,7 +431,7 @@ async function wrapInBwrap(command: string, cwd: string, t: Tier): Promise<strin
     // command: tools stage state there (mktemp, test fixtures, editor locks,
     // pi's own temp files) and expect it to survive across calls. /tmp is
     // world-writable on Linux anyway; the sandbox still protects the rest of
-    // the FS (read-only root, cap-drop, no net unless `net` tier).
+    // the FS (default-deny root, cap-drop, no net unless `net` tier).
     "--bind",
     "/tmp",
     "/tmp",
@@ -411,20 +464,30 @@ async function wrapInBwrap(command: string, cwd: string, t: Tier): Promise<strin
     // sandbox has NO egress at all — fail closed, never bypass the whitelist.
   }
 
+  // When the agent is forwarded (sshForward), sandboxed ssh needs ~/.ssh ro
+  // (known_hosts, config, pubkeys) — under the old ro-root it was visible by
+  // default; with a whitelist root it must be bound explicitly. The hidden
+  // loop below skips the ~/.ssh hide in this mode.
+  if (sshForward) {
+    const sshDir = join(homedir(), ".ssh");
+    if (await pathExists(sshDir)) args.push("--ro-bind", sshDir, sshDir);
+  }
   // Hidden paths: contents made invisible to sandboxed commands (empty tmpfs
-  // over dirs, /dev/null over files) — stricter than the read-only root, for
-  // identity material that shouldn't be readable at all. Mounted AFTER every
-  // other FS mount (/tmp, /var/tmp, /dev, /proc, writableDirs, the net
-  // bridge): mounts apply in order, so this is the only way they win over
-  // e.g. the real /tmp bind. They lose only to the agent bind below, so the
-  // forwarded agent socket stays visible even if ~/.cache/guard is hidden.
+  // over dirs, /dev/null over files) — stricter than the whitelist root, for
+  // identity material that shouldn't be readable at all (mostly system paths
+  // like /etc/shadow now — home secrets are already invisible by default).
+  // Mounted AFTER every other FS mount (/tmp, /var/tmp, /dev, /proc,
+  // writableDirs, the net bridge): mounts apply in order, so this is the
+  // only way they win over e.g. the real /tmp bind. They lose only to the
+  // agent bind below, so the forwarded agent socket stays visible even if
+  // ~/.cache/guard is hidden.
   //
   // When the agent is forwarded (sshForward), sandboxed ssh needs its config
-  // to function — the prefilled ~/.ssh hide is skipped entirely, leaving the
-  // dir read-only via the root ro-bind (no extra mount, and deliberately no
-  // writable bind: nothing can write the real ~/.ssh, so host keys don't
-  // persist and accept-new re-warns per host). The strict hide applies
-  // whenever the agent is NOT forwarded.
+  // to function — the prefilled ~/.ssh hide is skipped entirely, and ~/.ssh
+  // is bound read-only just above (deliberately no writable bind: nothing
+  // can write the real ~/.ssh, so host keys don't persist and accept-new
+  // re-warns per host). The strict hide applies whenever the agent is NOT
+  // forwarded.
   for (const m of await hiddenPathMounts(config.hiddenPaths.map(expandHome), homedir())) {
     if (sshForward && m.kind === "tmpfs" && m.target === join(homedir(), ".ssh")) continue;
     if (m.kind === "tmpfs") args.push("--tmpfs", m.target);
@@ -432,7 +495,12 @@ async function wrapInBwrap(command: string, cwd: string, t: Tier): Promise<strin
   }
   // The agent socket bind goes last of all: it must survive every other
   // mount (writableDirs, hidden paths) to keep the forwarded socket visible.
-  if (sshAgentBind) args.push("--bind", sshAgentBind[0], sshAgentBind[1]);
+  // --dir creates the bind target's parent (usually ~/.cache/guard) in case
+  // ~/.cache isn't a writableDir.
+  if (sshAgentBind) {
+    args.push("--dir", dirname(sshAgentBind[1]));
+    args.push("--bind", sshAgentBind[0], sshAgentBind[1]);
+  }
 
   if (unshareNet) args.push("--unshare-net");
   args.push(

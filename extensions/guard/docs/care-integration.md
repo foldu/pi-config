@@ -229,7 +229,7 @@ A skeptical pass over the plan. Grouped by resolution status.
 
 - **Auto-allow is gated on the sandbox.** CARE's static guard has a non-trivial miss
   rate; its misses land in ALLOW and would pass silently. That is only acceptable
-  because bwrap contains the blast radius (read-only root, no network). Auto-allow is
+  because bwrap contains the blast radius (default-deny root, no network). Auto-allow is
   therefore **disabled when the sandbox is off** (Decision flow §4). Note this is
   *partial* containment: writes into the project dir are still uncontained.
 - **Read-only auto-allow is not "no writes".** `cat ~/.ssh/id_rsa` (exfiltration-read),

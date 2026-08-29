@@ -35,10 +35,9 @@ export interface HiddenMount {
  * Missing paths are handled conservatively: a name like `~/.ssh/id_` (CARE's
  * SECRET_READ_PATHS prefix form) isn't a real file — mounting over it would
  * hide nothing. When `home` is given, a missing path under it falls back to
- * hiding the parent dir, but only when the parent EXISTS — bwrap must create
- * a mountpoint for a missing target, and it cannot mkdir inside the
- * read-only root ("Can't mkdir …: Read-only file system" breaks every
- * command). Never hides HOME itself (that would wipe the project view) and
+ * hiding the parent dir, but only when the parent EXISTS — bwrap creates a
+ * mountpoint for a missing target, so hiding a nonexistent path is a no-op.
+ * Never hides HOME itself (that would wipe the project view) and
  * never a system dir (hiding /etc would break the sandbox). Everything else
  * is skipped: there is nothing to hide.
  *
@@ -59,7 +58,7 @@ export async function hiddenPathMounts(paths: string[], home?: string): Promise<
         continue; // outside home, or parent is HOME — nothing safe to hide
       }
       try {
-        await stat(parent); // bwrap can't mkdir in the ro root — mount only what exists
+        await stat(parent); // mount only what exists — a missing parent hides nothing
         out.push({ kind: "tmpfs", target: parent }); // prefix → hide the dir
       } catch {
         // parent missing too — nothing exists to hide

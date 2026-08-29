@@ -5,7 +5,9 @@
   "warnPolicy": "prompt",
   // dirs that are auto allowed to be read without prompting
   "allowedReadDirs": ["/nix", "~/.rustup", "~/.cargo", "/tmp"],
-  // dirs that will be mounted rw instead of only ro
+  // dirs bound rw into the sandbox; everything else outside the project is
+  // invisible (the sandbox starts from an empty root — only these, the
+  // project, and the system closure are bound in)
   "writableDirs": ["~/.cargo", "~/.rustup", "~/.cache", "~/.local/share", "~/.config", "~/.npm"],
   // hosts the default `on` tier may reach — the tier is always proxy-only
   // egress: no network interfaces, all traffic through a local proxy that
