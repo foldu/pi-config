@@ -28,7 +28,7 @@ Notes:
   script above instead.
 - `npm/package.json` holds the type packages as `devDependencies`:
   - `@earendil-works/pi-coding-agent` / `pi-tui` are pinned to the exact pi runtime
-    version (currently `0.84.1`) so editor types match the running pi. **Bump these
+    version (currently `0.85.1`) so editor types match the running pi. **Bump these
     pins when pi is upgraded.**
   - `@types/node`, `shell-quote`, `typescript` are also devDeps.
 - `npm/` is gitignored, so if `npm/package.json` is missing on a fresh checkout,

@@ -1,0 +1,12 @@
+{
+  "provider": "kagi",
+  "kagiApiKey": "!sops -d --extract '[\"kagi_api_key\"]' \"$HOME/.pi/agent/secrets.sops.yaml\"",
+  "workflow": "none",
+  "commands": {
+    "websearch": { "enabled": false },
+    "curator": { "enabled": false }
+  },
+  "pdf": {
+    "provider": "unpdf"
+  }
+}
