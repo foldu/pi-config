@@ -39,6 +39,21 @@ Notes:
   `diff-syntax.ts` read `event.input.file_path`, which the write tool schema dropped
   in favor of `path` — the typecheck caught the dead branch.
 
+## Commits
+
+Short, scoped, imperative — `<area>: <Change>`, one logical change per commit:
+
+```
+guard: Hard-hide the sops age key
+fmt: Ignore *.sops.yaml
+extensions: Add reload-harness
+```
+
+Scope is the component, not the file type (`guard`, `fmt`, `extensions`, `web-search`);
+the change starts with a capital letter. Skip the body unless the *why* isn't obvious
+from the subject; never pad a commit with a restatement of its diff. Unrelated fixes in
+one session are separate commits.
+
 ## Guard extension
 
 The `extensions/guard/` extension is self-contained (its own `package.json` +
