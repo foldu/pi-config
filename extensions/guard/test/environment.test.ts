@@ -10,6 +10,7 @@ import {
   hiddenPathMounts,
   installHint,
 } from "../lib/environment.ts";
+import { SECRET_READ_PATHS } from "../lib/care/path.ts";
 
 async function withTempDirs(
   spec: Array<[string, boolean]>, // [dirName, executable] relative to base
@@ -147,6 +148,40 @@ test("hiddenPathMounts classifies dirs as tmpfs and files as null-bind", async (
     assert.deepEqual(mounts, [
       { kind: "tmpfs", target: join(base, "keysdir") },
       { kind: "null-bind", target: join(base, "creds") },
+    ]);
+  } finally {
+    await rm(base, { recursive: true, force: true });
+  }
+});
+
+test("hiddenPathMounts hides the sops age key from the SECRET_READ_PATHS prefill", async () => {
+  const base = join(
+    tmpdir(),
+    `guard-hidden-test-${process.pid}-${Math.random().toString(36).slice(2)}`,
+  );
+  const key = join(base, ".config/sops/age/keys.txt");
+  await mkdir(join(base, ".config/sops/age"), { recursive: true });
+  await writeFile(key, "AGE-SECRET-KEY-1\n");
+  try {
+    // The default hiddenPaths prefill is SECRET_READ_PATHS, so the age key is
+    // hidden with no config at all: a real file gets /dev/null bound over it.
+    const prefilled = SECRET_READ_PATHS.filter((p) => p.startsWith("~/")).map((p) =>
+      join(base, p.slice(2)),
+    );
+    const mounts = await hiddenPathMounts(prefilled, base);
+    assert.deepEqual(
+      mounts.find((m) => m.target === key),
+      {
+        kind: "null-bind",
+        target: key,
+      },
+    );
+
+    // Key absent (other machine, or SOPS_AGE_KEY_FILE elsewhere) → hide the
+    // parent age dir, and never fall back past it to ~/.config.
+    await rm(key);
+    assert.deepEqual(await hiddenPathMounts([key], base), [
+      { kind: "tmpfs", target: join(base, ".config/sops/age") },
     ]);
   } finally {
     await rm(base, { recursive: true, force: true });

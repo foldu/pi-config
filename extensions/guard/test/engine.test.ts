@@ -199,6 +199,13 @@ describe("resolution skip predicates (Stage 3)", () => {
     assert.equal(f.skipReason, "p_spath");
   });
 
+  it("hard-blocks reads of the sops age key (p_spath)", () => {
+    const r = analyze("cat ~/.config/sops/age/keys.txt");
+    const f = resolve(r);
+    assert.equal(f.decision, "DENY");
+    assert.equal(f.skipReason, "p_spath");
+  });
+
   it("leaves a benign cross-host transfer at WARN for the human judge", () => {
     const r = analyze("rsync -avz ./data user@host:/backup/");
     const f = resolve(r);

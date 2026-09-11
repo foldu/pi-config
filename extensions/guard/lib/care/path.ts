@@ -29,6 +29,7 @@ export const SECRET_READ_PATHS = [
   "~/.docker/config.json",
   "~/.kube/config",
   "~/.gnupg/",
+  "~/.config/sops/age/keys.txt",
   "~/.netrc",
   "~/.mysql_history",
   "/etc/shadow",
