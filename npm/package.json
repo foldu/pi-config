@@ -9,15 +9,15 @@
     "fmt:check": "cd .. && oxfmt --check"
   },
   "dependencies": {
-    "pi-mcp-adapter": "^2.26.1",
-    "pi-powerline-footer": "^0.15.1",
-    "pi-web-access": "^0.23.0"
+    "pi-mcp-adapter": "^2.33.0",
+    "pi-powerline-footer": "^0.17.1",
+    "pi-web-access": "^0.29.0"
   },
   "devDependencies": {
-    "@earendil-works/pi-coding-agent": "0.84.1",
-    "@earendil-works/pi-tui": "0.84.1",
+    "@earendil-works/pi-coding-agent": "0.85.1",
+    "@earendil-works/pi-tui": "0.85.1",
     "@types/node": "^24.0.0",
-    "oxfmt": "^0.64.0",
+    "oxfmt": "^0.67.0",
     "oxlint": "^1.79.0",
     "shell-quote": "^1.8.2",
     "typescript": "^7.0.2"
