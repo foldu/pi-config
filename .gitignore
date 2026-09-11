@@ -10,6 +10,7 @@ node_modules/
 # caches
 models-store.json
 trust.json
+mcp-cache.json
 
 *.log
 .DS_Store
