@@ -40,8 +40,8 @@ is auto-allowed."
 ### `on` — the default: whitelisted network, new hosts prompt
 
 - bwrap with a **whitelist root**: the sandbox starts from an empty root and
-  only the system closure (/nix, /run/current-system, /usr, /etc — TLS certs,
-  passwd, DNS), the project dir, `WRITABLE_DIRS`, and the user's own PATH bin
+  only the system closure (/nix, /run/current-system, /run/systemd/resolve, /usr,
+  /etc — TLS certs, passwd, DNS), the project dir, `WRITABLE_DIRS`, and the user's own PATH bin
   dirs (~/.nix-profile/bin, ~/.local/bin, …) are bound in. Everything else on
   the host — every other home dir, /root, /var, /opt, /srv — is **invisible**, not
   merely read-only: a sandboxed command can't read what it can't see. Project +

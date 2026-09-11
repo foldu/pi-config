@@ -348,11 +348,17 @@ async function wrapInBwrap(command: string, cwd: string, t: Tier): Promise<strin
   // exist inside the sandbox. A read-only root bind left all of it *visible*
   // (read-only, but readable: ~/.ssh, ~/.aws, cloud credentials, other
   // users' files). Default-deny visibility is the containment.
-  // --ro-bind-try skips paths that don't exist (non-NixOS).
+  // --ro-bind-try skips paths that don't exist (non-NixOS, non-systemd).
   const args: string[] = ["bwrap"];
   for (const p of [
     "/nix",
     "/run/current-system",
+    // systemd-resolved keeps the stub resolver config in /run and distros point
+    // /etc/resolv.conf at it through a symlink chain; with only
+    // /run/current-system bound the chain dangles and local name lookups fail.
+    // The proxy-only tiers resolve names host-side, but `net` uses the host
+    // resolver. Not /run: the rest stays invisible.
+    "/run/systemd/resolve",
     "/usr",
     "/bin",
     "/sbin",
