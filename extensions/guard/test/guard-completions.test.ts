@@ -125,11 +125,20 @@ test("add-dir path completion matches entries in the parent dir", async () => {
 });
 
 test("add-dir path completion: ~/ form is kept for home paths", async () => {
-  const r = await guardAddDirCompletions("/guard add-dir ~/.c");
-  assert.ok(r);
-  assert.equal(r.prefix, "~/.c");
-  assert.ok(r.items.every((i) => i.value.startsWith("~/")));
-  assert.ok(r.items.some((i) => i.value === "~/.cache/"));
+  // Don't depend on the runner's home contents (CI runs with an empty $HOME).
+  const home = await mkdtemp(join(tmpdir(), "guard-home-"));
+  await mkdir(join(home, ".cache"));
+  const previousHome = process.env.HOME;
+  process.env.HOME = home;
+  try {
+    const r = await guardAddDirCompletions("/guard add-dir ~/.c");
+    assert.ok(r);
+    assert.equal(r.prefix, "~/.c");
+    assert.ok(r.items.every((i) => i.value.startsWith("~/")));
+    assert.ok(r.items.some((i) => i.value === "~/.cache/"));
+  } finally {
+    process.env.HOME = previousHome;
+  }
 });
 
 test("add-dir path completion returns null for non-matching lines", async () => {
