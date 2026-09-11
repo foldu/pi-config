@@ -2,3 +2,6 @@
 # Docs stay hand-written; settings.json is pi's live config, not ours to reformat.
 settings.json
 **/*.md
+# sops owns the formatting: oxfmt reindents the age block scalar, and the next
+# `sops` edit would rewrite it back and fail CI's fmt:check.
+*.sops.yaml
