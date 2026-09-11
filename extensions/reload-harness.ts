@@ -20,11 +20,15 @@
  * ## How it works
  *
  * Tools run with `ExtensionContext`, which has no `reload()` — only command
- * handlers get it. So the tool queues `/reload-harness` as a follow-up user
- * message (`pi.sendUserMessage(..., { deliverAs: "followUp" })`), and the
- * command handler then calls `ctx.reload()`. Reload emits `session_shutdown`
- * for the current extension runtime, reloads all resources, and re-emits
- * `session_start` with `reason: "reload"`.
+ * handlers get it. So the tool dispatches the `/reload-harness` command
+ * through `pi.sendUserMessage(..., { expandPromptTemplates: true })`:
+ * extension commands run inline, even while the agent is streaming, so
+ * `ctx.reload()` completes before this tool returns.
+ *
+ * `expandPromptTemplates` is load-bearing. Without it the text is queued as an
+ * ordinary user message for the LLM, the command never executes, and the
+ * reload silently doesn't happen (pi's own example in docs/extensions.md has
+ * this bug).
  *
  * Treat reload as terminal for the handler: `await ctx.reload(); return;`.
  * Code after it runs in the pre-reload call frame, and in-memory state of
@@ -56,12 +60,14 @@ export default function (pi: ExtensionAPI) {
     ],
     parameters: Type.Object({}),
     async execute() {
-      pi.sendUserMessage("/reload-harness", { deliverAs: "followUp" });
+      // Inline dispatch: extension commands are handled immediately, even
+      // mid-stream, so the reload lands before this tool returns.
+      await pi.sendUserMessage("/reload-harness", { expandPromptTemplates: true });
       return {
         content: [
           {
             type: "text",
-            text: "Queued /reload-harness as a follow-up command — the harness will reload now.",
+            text: "Reloaded the harness — extensions, skills, prompts, themes, and context files.",
           },
         ],
         details: {},
