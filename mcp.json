@@ -23,6 +23,14 @@
         "BAMBUDDY_URL": "https://bambu.home.5kw.li",
         "BAMBUDDY_API_KEY": "!sops -d --extract '[\"bambuddy_api_key\"]' \"$HOME/.pi/agent/secrets.sops.yaml\""
       }
+    },
+    "ghidra": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "https://github.com/bethington/ghidra-mcp/releases/download/v6.0.0/ghidra_mcp_bridge-6.0.0-py3-none-any.whl",
+        "bridge-mcp-ghidra"
+      ]
     }
   }
 }
