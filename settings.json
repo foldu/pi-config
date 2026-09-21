@@ -15,7 +15,7 @@
     "showTerminalProgress": true
   },
   "images": {
-    "blockImages": true
+    "blockImages": false
   },
   "showCacheMissNotices": true
 }
