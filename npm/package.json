@@ -9,17 +9,18 @@
     "fmt:check": "cd .. && oxfmt --check"
   },
   "dependencies": {
-    "pi-mcp-adapter": "^2.33.0",
-    "pi-powerline-footer": "^0.17.1",
-    "pi-web-access": "^0.29.0"
+    "@juicesharp/rpiv-ask-user-question": "^2.12.0",
+    "pi-powerline-footer": "^0.19.1",
+    "pi-subagents": "^0.75.0",
+    "pi-web-access": "^0.35.0"
   },
   "devDependencies": {
-    "@earendil-works/pi-coding-agent": "0.85.1",
-    "@earendil-works/pi-tui": "0.85.1",
-    "@types/node": "^24.0.0",
-    "oxfmt": "^0.67.0",
-    "oxlint": "^1.79.0",
-    "shell-quote": "^1.8.2",
+    "@earendil-works/pi-coding-agent": "1.0.1",
+    "@earendil-works/pi-tui": "1.0.1",
+    "@types/node": "^24.19.1",
+    "oxfmt": "^0.71.0",
+    "oxlint": "^1.86.0",
+    "shell-quote": "^1.12.0",
     "typescript": "^7.0.2"
   }
 }
