@@ -1,4 +1,6 @@
 **/*.md
+# pi-subagents writes runtime state here.
+pi-subagents/
 # sops owns the formatting: oxfmt reindents the age block scalar, and the next
 # `sops` edit would rewrite it back and fail CI's fmt:check.
 *.sops.yaml

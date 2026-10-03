@@ -12,5 +12,8 @@ models-store.json
 trust.json
 mcp-cache.json
 
+# pi-subagents runtime state
+pi-subagents/
+
 *.log
 .DS_Store
