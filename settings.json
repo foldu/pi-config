@@ -1,11 +1,12 @@
 {
-  "lastChangelogVersion": "0.85.1",
+  "lastChangelogVersion": "1.0.0",
   "theme": "kanagawa",
   "defaultProvider": "deepseek",
-  "defaultModel": "deepseek-v4-flash",
+  "defaultModel": "deepseek-flash",
   "defaultThinkingLevel": "high",
   "packages": [
-    "npm:pi-mcp-adapter",
+    "npm:@juicesharp/rpiv-ask-user-question",
+    "npm:pi-subagents",
     "npm:pi-web-access",
     "npm:pi-powerline-footer",
     "git:github.com/DietrichGebert/ponytail"
